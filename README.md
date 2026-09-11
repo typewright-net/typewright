@@ -1,6 +1,6 @@
-# typewright
+# Typewright
 
-
+Everything is a Type.
 
 ## Getting started
 

@@ -3,6 +3,8 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Typewright.Validation\Typewright.Validation.csproj" />
     <ProjectReference Include="..\..\src\Typewright.Validation.AspNetCore\Typewright.Validation.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\src\Typewright.Validation.Generators\Typewright.Validation.Generators.csproj"
+                      OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
 </Project>

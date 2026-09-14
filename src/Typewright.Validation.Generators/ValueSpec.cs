@@ -31,6 +31,12 @@ internal sealed record ValueSpec
 
     public bool RawIsSpanParsable { get; init; }
 
+    /// <summary>The user wrote their own static BindAsync; never emit one over it.</summary>
+    public bool UserDeclaredBindAsync { get; init; }
+
+    /// <summary>Set at output time when the compilation references the ASP.NET integration.</summary>
+    public bool EmitBindAsync { get; init; }
+
     public bool Comparable { get; init; }
 
     public ToStringKind ToStringKind { get; init; }

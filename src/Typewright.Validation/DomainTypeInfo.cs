@@ -16,6 +16,9 @@ public sealed class DomainTypeInfo
     /// <summary>The raw type the domain type wraps (for models, the DTO type).</summary>
     public required Type RawType { get; init; }
 
+    /// <summary>True for domain models (raw shape is a DTO), false for field values.</summary>
+    public bool IsModel { get; init; }
+
     /// <summary>The declared validation rules, in the order they run.</summary>
     public IReadOnlyList<DomainRuleInfo> Rules { get; init; } = [];
 

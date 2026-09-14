@@ -79,6 +79,21 @@ readonly partial record struct {{name}} : {{interfaces}}
             EmitParsable(body, spec, result);
         }
 
+        if (spec.EmitBindAsync)
+        {
+            body.Append($$"""
+    /// <summary>
+    /// Binds from a route value, query string entry, or header; a failed bind throws a
+    /// <see cref="{{V}}.DomainValidationException"/> with the errors scoped to the
+    /// parameter name, turned into an RFC 9457 response by <c>UseTypewright()</c>.
+    /// </summary>
+    public static global::System.Threading.Tasks.ValueTask<{{name}}?> BindAsync(global::Microsoft.AspNetCore.Http.HttpContext context, global::System.Reflection.ParameterInfo parameter)
+        => global::Typewright.Validation.AspNetCore.TypewrightBinding.BindDomainValueAsync<{{name}}, {{raw}}>(context, parameter);
+
+
+""");
+        }
+
         EmitDomainTypeInfo(body, spec);
         EmitTypeConverter(body, spec);
 

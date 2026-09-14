@@ -1,5 +1,7 @@
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.DependencyInjection;
+using Typewright.Validation.AspNetCore.Mvc;
 
 namespace Typewright.Validation.AspNetCore;
 
@@ -29,5 +31,19 @@ public static class TypewrightServiceCollectionExtensions
     {
         ArgumentNullException.ThrowIfNull(services);
         return services.AddExceptionHandler<TypewrightValidationExceptionHandler>();
+    }
+
+    /// <summary>
+    /// Registers the Typewright model binders for MVC controllers, so domain-typed action
+    /// parameters bind with errors accumulated into <c>ModelState</c>:
+    /// <code>
+    /// builder.Services.AddControllers(options => options.AddTypewright());
+    /// </code>
+    /// </summary>
+    public static MvcOptions AddTypewright(this MvcOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        options.ModelBinderProviders.Insert(0, new TypewrightModelBinderProvider());
+        return options;
     }
 }

@@ -26,16 +26,22 @@ public sealed class DomainValueGenerator : IIncrementalGenerator
             static (node, _) => node is TypeDeclarationSyntax,
             static (ctx, ct) => Parse(ctx, ct));
 
-        context.RegisterSourceOutput(results, static (productionContext, result) =>
+        var combined = results.Combine(AspNetSupport.Available(context));
+        context.RegisterSourceOutput(combined, static (productionContext, pair) =>
         {
+            var (result, aspNetAvailable) = pair;
             foreach (var diagnostic in result.Diagnostics)
             {
                 productionContext.ReportDiagnostic(diagnostic.ToDiagnostic());
             }
 
-            if (result.Spec is not null)
+            if (result.Spec is { } spec)
             {
-                productionContext.AddSource(result.Spec.HintName, DomainValueEmitter.Emit(result.Spec));
+                spec = spec with
+                {
+                    EmitBindAsync = aspNetAvailable && spec.RawIsParsable && !spec.UserDeclaredBindAsync,
+                };
+                productionContext.AddSource(spec.HintName, DomainValueEmitter.Emit(spec));
             }
         });
     }
@@ -108,6 +114,7 @@ public sealed class DomainValueGenerator : IIncrementalGenerator
             RawIsSpanParsable = rawIsString || ImplementsInterface(raw, "System.ISpanParsable<TSelf>", raw),
             Comparable = comparable,
             ToStringKind = ClassifyToString(raw),
+            UserDeclaredBindAsync = symbol.GetMembers("BindAsync").Any(member => member.IsStatic),
         };
 
         foreach (var attribute in symbol.GetAttributes())

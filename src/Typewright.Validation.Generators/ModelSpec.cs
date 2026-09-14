@@ -62,5 +62,11 @@ internal sealed record ModelSpec
     /// <summary>Whether the user declared the cross-field Validate hook (drives constructor accessibility).</summary>
     public bool HasValidateHook { get; init; }
 
+    /// <summary>The user wrote their own static BindAsync; never emit one over it.</summary>
+    public bool UserDeclaredBindAsync { get; init; }
+
+    /// <summary>Set at output time when the compilation references the ASP.NET integration.</summary>
+    public bool EmitBindAsync { get; init; }
+
     public EquatableArray<PropertySpec> Properties { get; init; } = EquatableArray<PropertySpec>.Empty;
 }

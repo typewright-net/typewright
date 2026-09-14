@@ -193,6 +193,7 @@ namespace Snapshots
             Name = "Shipment",
             DomainType = typeof(Shipment),
             RawType = typeof(Dto),
+            IsModel = true,
             Fields = new global::Typewright.Validation.DomainFieldInfo[]
             {
                 new global::Typewright.Validation.DomainFieldInfo { Name = "shipmentSku", PropertyName = "Sku", FieldType = typeof(global::Snapshots.Sku), Required = true, IsCollection = false },

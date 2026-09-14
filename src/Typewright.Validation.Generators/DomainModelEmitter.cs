@@ -24,11 +24,17 @@ internal static class DomainModelEmitter
             indent = "    ";
         }
 
+        var interfaces = $"{V}.IDomainModel<{name}, {name}.Dto>";
+        if (spec.EmitBindAsync)
+        {
+            interfaces += $", global::Microsoft.AspNetCore.Http.IBindableFromHttpContext<{name}>";
+        }
+
         var body = new StringBuilder();
         body.Append($$"""
 [global::System.Text.Json.Serialization.JsonConverter(typeof({{V}}.Json.DomainModelJsonConverter<{{name}}, {{name}}.Dto>))]
 [global::System.CodeDom.Compiler.GeneratedCode("Typewright.Validation.Generators", "0.1.0")]
-partial record {{name}} : {{V}}.IDomainModel<{{name}}, {{name}}.Dto>
+partial record {{name}} : {{interfaces}}
 {
 
 """);
@@ -64,6 +70,21 @@ partial record {{name}} : {{V}}.IDomainModel<{{name}}, {{name}}.Dto>
 
 
 """);
+
+        if (spec.EmitBindAsync)
+        {
+            body.Append($$"""
+    /// <summary>
+    /// Binds from the JSON request body via the DTO shape, accumulating every error; a
+    /// failed bind throws a <see cref="{{V}}.DomainValidationException"/> turned into an
+    /// RFC 9457 response by <c>UseTypewright()</c>.
+    /// </summary>
+    public static global::System.Threading.Tasks.ValueTask<{{name}}?> BindAsync(global::Microsoft.AspNetCore.Http.HttpContext context, global::System.Reflection.ParameterInfo parameter)
+        => global::Typewright.Validation.AspNetCore.TypewrightBinding.BindDomainModelAsync<{{name}}, Dto>(context, parameter);
+
+
+""");
+        }
 
         EmitToDto(body, spec);
         EmitDomainTypeInfo(body, spec);
@@ -359,6 +380,7 @@ partial record {{name}} : {{V}}.IDomainModel<{{name}}, {{name}}.Dto>
         Name = {{Literal(spec.Name)}},
         DomainType = typeof({{spec.Name}}),
         RawType = typeof(Dto),
+        IsModel = true,
         Fields = {{fieldsExpression}},
     };
 

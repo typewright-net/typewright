@@ -25,16 +25,19 @@ public sealed class DomainModelGenerator : IIncrementalGenerator
             static (node, _) => node is TypeDeclarationSyntax,
             static (ctx, ct) => Parse(ctx, ct));
 
-        context.RegisterSourceOutput(results, static (productionContext, result) =>
+        var combined = results.Combine(AspNetSupport.Available(context));
+        context.RegisterSourceOutput(combined, static (productionContext, pair) =>
         {
+            var (result, aspNetAvailable) = pair;
             foreach (var diagnostic in result.Diagnostics)
             {
                 productionContext.ReportDiagnostic(diagnostic.ToDiagnostic());
             }
 
-            if (result.Spec is not null)
+            if (result.Spec is { } spec)
             {
-                productionContext.AddSource(result.Spec.HintName, DomainModelEmitter.Emit(result.Spec));
+                spec = spec with { EmitBindAsync = aspNetAvailable && !spec.UserDeclaredBindAsync };
+                productionContext.AddSource(spec.HintName, DomainModelEmitter.Emit(spec));
             }
         });
     }
@@ -91,6 +94,7 @@ public sealed class DomainModelGenerator : IIncrementalGenerator
                 ? symbol.Name
                 : symbol.ContainingNamespace.ToDisplayString() + "." + symbol.Name) + ".g.cs",
             HasValidateHook = DomainTypeFacts.HasValidateHook(symbol),
+            UserDeclaredBindAsync = symbol.GetMembers("BindAsync").Any(member => member.IsStatic),
             Properties = new EquatableArray<PropertySpec>(properties.ToArray()),
         };
 

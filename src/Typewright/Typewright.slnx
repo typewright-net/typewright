@@ -1,6 +1,0 @@
-<Solution>
-  <Project Path="Typewright.Actor/Typewright.Actor.csproj" />
-  <Project Path="Typewright.Lattice/Typewright.Lattice.csproj" />
-  <Project Path="Typewright.Validation.AspNetCore/Typewright.Validation.AspNetCore.csproj" />
-  <Project Path="Typewright.Validation/Typewright.Validation.csproj" />
-</Solution>

@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\samples\Billing.Api\Billing.Api.csproj" />
+    <ProjectReference Include="..\..\src\Typewright.Validation\Typewright.Validation.csproj" />
+    <ProjectReference Include="..\..\src\Typewright.Validation.AspNetCore\Typewright.Validation.AspNetCore.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -411,7 +411,8 @@ above, discovered during implementation:
   are deterministic across environments.
 - **Localization** (`IValidationMessageLocalizer`) applies at the
   problem-details boundary; MVC `ModelState` messages are not yet routed
-  through it.
+  through it. *(Superseded by plan 02: `IDomainErrorRenderer` replaced the
+  localizer and covers both paths.)*
 - **Known gaps**: a native AOT publish has not been exercised (STJ source-gen
   compatibility is tested); optional nullable-struct parameters
   (`InvoiceNumber?`) bind as null by design but have no end-to-end test; the

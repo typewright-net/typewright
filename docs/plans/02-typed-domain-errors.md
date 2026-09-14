@@ -1,6 +1,6 @@
 # Plan 02: Typed Domain Errors
 
-Status: draft (2026-09-14)
+Status: implemented (2026-09-14); see "Implementation notes" at the end
 Scope: reworks the error model of `Typewright.Validation`, `Typewright.Validation.Generators`, `Typewright.Validation.AspNetCore`
 Supersedes: the string `Code`/`Message` pair on `ValidationError` from plan 01
 
@@ -269,3 +269,31 @@ plan builds on it:
 | D4 | Messages | None in the domain; `IDomainErrorRenderer` at the boundary with `DefaultMessage` as the per-type default hook. |
 | D5 | Exceptions | Keep the single `DomainValidationException` carrier (accumulation requires it); typed errors restore `when`-guard ergonomics. |
 | D6 | Wire codes | Kept, as a derived projection of the types; response shape unchanged. |
+
+All six confirmed as recommended (2026-09-14).
+
+## 10. Implementation notes (2026-09-14)
+
+Implemented as designed (88 tests). Details worth knowing:
+
+- **Hook shapes**: a value hook is `Validate(TRaw, ValidationErrors)`, a model hook
+  `Validate(TSelf, ValidationErrors)`. Constructor privatization and TW0002 key off the
+  model shape; TW0005/TW0006 accept either.
+- **TW0005 checks the static type** of the argument to `Add`/`AddAt` (unwrapping the
+  implicit `IDomainError` conversion), so helpers returning a concrete error type are
+  fine; an argument typed only as `IDomainError` is flagged as undeclarable. The check
+  applies only inside `Validate` hooks (including lambdas/local functions in them) —
+  application code building its own `ValidationErrors` is unconstrained.
+- **Membership is set-wide**: a model hook may report any error in the model's derived
+  set (for example `RequiredError`), not only its `[Reports]` declarations.
+- **`RangeError` carries invariant strings** (`Min`/`Max`/`Actual`) so one error type
+  covers every raw type, including string-parsed bounds such as dates.
+- **Error sets of hand-written domain types** (no attributes, contract interfaces only)
+  under-approximate: they see `[Reports]` but not rule-implied errors, since there are
+  no rule attributes to read. Generated types are exact.
+- **JsonInvalidError appears in every model's set** because any model can be
+  body-bound; when a model is only ever built from trusted storage the entry is a
+  harmless over-approximation.
+- **MatchError handler order** is alphabetical by error type simple name, so signatures
+  change only when the set changes; duplicate simple names across namespaces get
+  numeric suffixes.

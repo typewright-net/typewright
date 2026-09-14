@@ -17,7 +17,7 @@ app.MapPut("/invoices/{id}", (InvoiceNumber id, BillingDocument doc, IBilling sv
 
 | Project | What it is |
 |---|---|
-| `Typewright.Validation` | Contracts and primitives: `IDomainValue<TSelf, TRaw>`, `IDomainModel<TSelf, TDto>`, `ValidationResult<T>`, path-scoped `ValidationErrors`, `DomainValidationException`, rule attributes, DTO-routed JSON converters, `DomainTypeInfo` descriptors. No dependencies beyond the BCL; usable entirely by hand. |
+| `Typewright.Validation` | Contracts and primitives: `IDomainValue<TSelf, TRaw>`, `IDomainModel<TSelf, TDto>`, typed `IDomainError` records, `ValidationResult<T>`, path-scoped `ValidationErrors`, `DomainValidationException`, rule attributes, DTO-routed JSON converters, `DomainTypeInfo` descriptors. No dependencies beyond the BCL; usable entirely by hand. |
 | `Typewright.Validation.Generators` | Incremental source generator plus analyzers. Turns `[DomainValue<T>]` / `[DomainModel]` declarations into complete implementations and closes the `new`/`default`/`with` construction holes. |
 | `Typewright.Validation.AspNetCore` | Minimal API binding helpers, `UseTypewright()` middleware writing RFC 9457 `HttpValidationProblemDetails`, an `IExceptionHandler` alternative, OpenAPI transformers, and MVC model binders. |
 
@@ -34,8 +34,11 @@ public readonly partial record struct InvoiceNumber;
 [DomainValue<DateOnly>(Comparable = true)]
 public readonly partial record struct InvoiceDate;
 
+public sealed record ChecksumError : IDomainError;
+
 [DomainValue<string>]
 [Length(1, 64), Normalize(Trim = true, Case = Casing.Upper)]
+[Reports<ChecksumError>]
 public readonly partial record struct AccountNumber
 {
     // Optional custom rule; runs after the attribute rules pass.
@@ -43,7 +46,7 @@ public readonly partial record struct AccountNumber
     {
         if (!Luhn.IsValid(value))
         {
-            errors.Add("checksum", "The account number checksum is invalid.");
+            errors.Add(new ChecksumError());
         }
     }
 }
@@ -92,7 +95,10 @@ A model with a cross-field rule gets a private constructor, so it can only be bu
 through the factories, plus typed `TryCreate`/`Create` factories over its fields:
 
 ```csharp
+public sealed record DateRangeError(DateOnly Begin, DateOnly End) : IDomainError;
+
 [DomainModel]
+[Reports<DateRangeError>]
 public sealed partial record BillingDocumentSearch
 {
     public required InvoiceDate BeginDate { get; init; }
@@ -103,7 +109,7 @@ public sealed partial record BillingDocumentSearch
     {
         if (candidate.EndDate < candidate.BeginDate)
         {
-            errors.Add("date_range.invalid", "The end date must be on or after the begin date.");
+            errors.Add(new DateRangeError(candidate.BeginDate.Value, candidate.EndDate.Value));
         }
     }
 }
@@ -111,6 +117,38 @@ public sealed partial record BillingDocumentSearch
 
 Non-domain-typed properties are copied between model and DTO unvalidated; analyzer
 TW0004 warns unless the property is explicitly marked `[Raw]`.
+
+## Typed domain errors
+
+Every failure is a type, not a string. An error is one sealed record implementing
+`IDomainError`, declared next to whatever produces it and carrying the structured facts
+of the failure (`LengthError(Min, Max, Actual)`), never prose. Wire codes derive from
+the type name (`DateRangeError` → `date_range`), and the invariant `DefaultMessage` is
+only the presentation fallback.
+
+Error *types* are open, but each domain type's error *set* is finite: rule attributes
+imply their built-in errors, hooks declare theirs with `[Reports<TError>]`, and models
+derive the union over their fields. The generator emits the set twice:
+
+- `DomainTypeInfo.ErrorTypes` — the runtime enumeration, so tooling can verify every
+  possible error is mapped to a response.
+- A generated `MatchError` with one handler per possible error — compiler-enforced
+  exhaustiveness. Add `[Reports<NewError>]` and every exhaustive call site fails to
+  compile until the new case is handled, without any central union type:
+
+```csharp
+var status = AccountNumber.MatchError(failure.Error,
+    checksum: _ => 422,
+    length:   _ => 400,
+    required: _ => 400);
+```
+
+Ordinary handling stays strongly typed too — pattern matching and `when` guards work,
+restoring what per-error exception types offered without giving up accumulation:
+
+```csharp
+catch (DomainValidationException e) when (e.Errors.Contains<ChecksumError>()) { ... }
+```
 
 ## Analyzers
 
@@ -123,6 +161,8 @@ type system cannot:
 | TW0002 | error | `with` on a `[DomainModel]` with a cross-field rule bypasses it |
 | TW0003 | error | a `[DomainValue]`/`[DomainModel]` type is not `partial` |
 | TW0004 | warning | a model property is not domain-typed (silence with `[Raw]`) |
+| TW0005 | error | a `Validate` hook reports an error type not in the type's error set |
+| TW0006 | warning | `[Reports<TError>]` on a type with no `Validate` hook |
 
 ## ASP.NET Core
 
@@ -161,8 +201,9 @@ DTO with every error accumulated. A failed bind throws; `UseTypewright()` (or th
 
 Because binding fails closed, forgetting `UseTypewright()` produces a 500 — never a
 handler running with default-valued domain types. Malformed JSON becomes a single
-`json.invalid` error at path `$`. Register an `IValidationMessageLocalizer` in DI to
-localize the messages; paths and codes stay stable.
+`json_invalid` error at path `$`. Messages are produced only at this boundary: register
+an `IDomainErrorRenderer` in DI to control or localize them (it covers both minimal API
+problem details and MVC `ModelState`); paths and codes stay stable.
 
 The OpenAPI transformers use the generated `DomainTypeInfo` descriptors: field values are
 documented as their raw primitive with `pattern`/`minLength`/`minimum`/`format`, models

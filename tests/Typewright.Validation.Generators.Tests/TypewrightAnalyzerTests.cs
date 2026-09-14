@@ -131,4 +131,61 @@ public class TypewrightAnalyzerTests
 
         Assert.Equal(["TW0004"], ids);
     }
+
+    [Fact]
+    public async Task Hook_reporting_an_undeclared_error_reports_TW0005()
+    {
+        var ids = await AnalyzeAsync("""
+            public sealed record SneakyError : IDomainError;
+
+            [DomainValue<string>]
+            public readonly partial record struct Sneaky
+            {
+                static partial void Validate(string value, ValidationErrors errors)
+                {
+                    errors.Add(new SneakyError());              // undeclared -> TW0005
+                    errors.Add(new RequiredError());            // built-in, in the set
+                    errors.AddAt("x", new SneakyError());       // undeclared -> TW0005
+                }
+            }
+            """);
+
+        Assert.Equal(["TW0005", "TW0005"], ids);
+    }
+
+    [Fact]
+    public async Task Hook_reporting_declared_and_rule_implied_errors_is_clean()
+    {
+        var ids = await AnalyzeAsync("""
+            public sealed record LocalRuleError : IDomainError;
+
+            [DomainValue<string>]
+            [Length(1, 8)]
+            [Reports<LocalRuleError>]
+            public readonly partial record struct Declared
+            {
+                static partial void Validate(string value, ValidationErrors errors)
+                {
+                    errors.Add(new LocalRuleError());
+                    errors.Add(new LengthError(1, 8, value.Length));   // implied by [Length]
+                }
+            }
+            """);
+
+        Assert.Empty(ids);
+    }
+
+    [Fact]
+    public async Task Reports_without_a_hook_reports_TW0006()
+    {
+        var ids = await AnalyzeAsync("""
+            public sealed record OrphanError : IDomainError;
+
+            [DomainValue<string>]
+            [Reports<OrphanError>]
+            public readonly partial record struct NoHook;
+            """);
+
+        Assert.Equal(["TW0006"], ids);
+    }
 }

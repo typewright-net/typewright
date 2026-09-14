@@ -74,6 +74,22 @@ internal static class DiagnosticDescriptors
         defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor UndeclaredErrorReported = new(
+        id: "TW0005",
+        title: "Hook reports an undeclared error type",
+        messageFormat: "The Validate hook on '{1}' reports '{0}', which is not in the type's error set; declare it with [Reports<{0}>] so the set stays finite and discoverable",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor ReportsWithoutHook = new(
+        id: "TW0006",
+        title: "[Reports] without a Validate hook",
+        messageFormat: "'{1}' declares [Reports<{0}>] but has no Validate hook that could report it",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
+        isEnabledByDefault: true);
+
     public static DiagnosticDescriptor ById(string id) => id switch
     {
         "TW1001" => InvalidDomainValueShape,

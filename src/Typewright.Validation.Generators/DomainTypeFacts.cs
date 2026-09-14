@@ -89,12 +89,23 @@ internal static class DomainTypeFacts
     /// </summary>
     public static bool HasValidateHook(INamedTypeSymbol symbol)
         => symbol.GetMembers("Validate").OfType<IMethodSymbol>().Any(method =>
-            method.IsStatic
+            IsImplementedHookShape(method)
+            && SymbolEqualityComparer.Default.Equals(method.Parameters[0].Type, symbol));
+
+    /// <summary>
+    /// Whether the type has any implemented Validate hook — a value's
+    /// <c>Validate(TRaw, ValidationErrors)</c> or a model's
+    /// <c>Validate(TSelf, ValidationErrors)</c>.
+    /// </summary>
+    public static bool HasAnyValidateHook(INamedTypeSymbol symbol)
+        => symbol.GetMembers("Validate").OfType<IMethodSymbol>().Any(IsImplementedHookShape);
+
+    private static bool IsImplementedHookShape(IMethodSymbol method)
+        => method.IsStatic
             && method.ReturnsVoid
             && method.Parameters.Length == 2
-            && SymbolEqualityComparer.Default.Equals(method.Parameters[0].Type, symbol)
             && method.Parameters[1].Type.ToDisplayString() == "Typewright.Validation.ValidationErrors"
-            && (!method.IsPartialDefinition || method.PartialImplementationPart is not null));
+            && (!method.IsPartialDefinition || method.PartialImplementationPart is not null);
 
     /// <summary>Candidate model properties: public instance get/init properties.</summary>
     public static bool IsCandidateModelProperty(IPropertySymbol property)

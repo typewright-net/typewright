@@ -6,6 +6,9 @@ internal enum PropertyKind
     Model = 1,
     ValueCollection = 2,
     ModelCollection = 3,
+
+    /// <summary>Not a domain type: copied between model and DTO without validation.</summary>
+    Raw = 4,
 }
 
 /// <summary>One composed property of a domain model.</summary>

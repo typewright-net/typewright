@@ -40,12 +40,38 @@ internal static class DiagnosticDescriptors
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
-    public static readonly DiagnosticDescriptor UnsupportedModelProperty = new(
-        id: "TW1005",
-        title: "Unsupported domain model property",
-        messageFormat: "The property '{0}' on [DomainModel] '{1}' is not a domain value, a domain model, or a supported collection of them; it cannot appear in the DTO shape",
+    // TW0001-TW0004 are reported by TypewrightAnalyzer, not the generators.
+
+    public static readonly DiagnosticDescriptor UnvalidatedConstruction = new(
+        id: "TW0001",
+        title: "Domain value constructed without validation",
+        messageFormat: "'{0}' bypasses validation for domain value '{1}'; use {1}.Create or {1}.TryCreate instead",
         category: Category,
         defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor WithBypassesCrossFieldValidation = new(
+        id: "TW0002",
+        title: "'with' bypasses cross-field validation",
+        messageFormat: "A 'with' expression on '{0}' bypasses its cross-field Validate rule; rebuild the model through {0}.Create or {0}.TryCreate",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor DomainTypeNotPartial = new(
+        id: "TW0003",
+        title: "Domain type is not partial",
+        messageFormat: "The domain type '{0}' must be declared partial so the Typewright generator can extend it",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor PropertyNotDomainTyped = new(
+        id: "TW0004",
+        title: "Domain model property is not domain-typed",
+        messageFormat: "The property '{0}' on domain model '{1}' is not a domain value, domain model, or collection of them; it is copied to the DTO unvalidated (mark it [Raw] to make that explicit)",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Warning,
         isEnabledByDefault: true);
 
     public static DiagnosticDescriptor ById(string id) => id switch
@@ -54,7 +80,6 @@ internal static class DiagnosticDescriptors
         "TW1002" => RuleNotApplicable,
         "TW1003" => NotComparable,
         "TW1004" => InvalidDomainModelShape,
-        "TW1005" => UnsupportedModelProperty,
         _ => throw new ArgumentOutOfRangeException(nameof(id), id, "Unknown diagnostic id."),
     };
 }

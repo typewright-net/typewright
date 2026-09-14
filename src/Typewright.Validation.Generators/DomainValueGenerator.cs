@@ -23,7 +23,7 @@ public sealed class DomainValueGenerator : IIncrementalGenerator
     {
         var results = context.SyntaxProvider.ForAttributeWithMetadataName(
             DomainValueAttributeMetadataName,
-            static (node, _) => node is RecordDeclarationSyntax or StructDeclarationSyntax,
+            static (node, _) => node is TypeDeclarationSyntax,
             static (ctx, ct) => Parse(ctx, ct));
 
         context.RegisterSourceOutput(results, static (productionContext, result) =>
@@ -56,12 +56,17 @@ public sealed class DomainValueGenerator : IIncrementalGenerator
         if (!symbol.IsRecord
             || symbol.TypeKind != TypeKind.Struct
             || !symbol.IsReadOnly
-            || !isPartial
             || symbol.Arity != 0
             || symbol.ContainingType is not null)
         {
             diagnostics.Add(DiagnosticSpec.Create(
                 DiagnosticDescriptors.InvalidDomainValueShape, location, symbol.Name));
+            return Failed(diagnostics);
+        }
+
+        if (!isPartial)
+        {
+            // Analyzer TW0003 reports this; just skip generation.
             return Failed(diagnostics);
         }
 

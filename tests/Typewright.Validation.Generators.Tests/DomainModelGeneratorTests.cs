@@ -128,7 +128,7 @@ public class DomainModelGeneratorTests
     }
 
     [Fact]
-    public void Non_partial_model_reports_TW1004()
+    public void Non_record_model_reports_TW1004()
     {
         var (result, _) = GeneratorTest.Run("""
             using Typewright.Validation;
@@ -136,7 +136,7 @@ public class DomainModelGeneratorTests
             namespace Broken;
 
             [DomainModel]
-            public sealed record NotPartial;
+            public sealed partial class NotARecord;
             """);
 
         var diagnostic = Assert.Single(result.Diagnostics);
@@ -144,22 +144,43 @@ public class DomainModelGeneratorTests
     }
 
     [Fact]
-    public void Unsupported_property_reports_TW1005()
+    public void Non_domain_properties_pass_through_unvalidated()
     {
-        var (result, _) = GeneratorTest.Run("""
+        // Analyzer TW0004 warns about these; the generator copies them through the DTO
+        // so the model still round-trips.
+        var (result, output) = GeneratorTest.Run("""
             using Typewright.Validation;
 
-            namespace Broken;
+            namespace Passthrough;
 
             [DomainModel]
             public sealed partial record Mixed
             {
                 public required string PlainString { get; init; }
+
+                [Raw]
+                public int? Note { get; init; }
             }
             """);
 
-        var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("TW1005", diagnostic.Id);
+        Assert.Empty(result.Diagnostics);
+        var assembly = EmitAndLoad(output);
+
+        var mixed = assembly.GetType("Passthrough.Mixed")!;
+        var dtoType = assembly.GetType("Passthrough.Mixed+Dto")!;
+
+        var missing = InvokeTryCreate(mixed, dtoType, Activator.CreateInstance(dtoType));
+        Assert.False((bool)GetProperty(missing, "IsValid")!);
+        var error = ((IEnumerable)GetProperty(missing, "Errors")!).Cast<object>().Single();
+        Assert.Equal("plainString", GetProperty(error, "Path"));
+
+        var dto = Activator.CreateInstance(dtoType)!;
+        SetProperty(dto, "PlainString", "copied");
+        SetProperty(dto, "Note", 7);
+        var valid = InvokeTryCreate(mixed, dtoType, dto);
+        var model = GetProperty(valid, "Value")!;
+        Assert.Equal("copied", GetProperty(model, "PlainString"));
+        Assert.Equal(7, GetProperty(model, "Note"));
     }
 
     private static object? InvokeTryCreate(Type model, Type dtoType, object? dto)

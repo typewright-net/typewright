@@ -93,8 +93,26 @@ public class DomainValueGeneratorTests
     }
 
     [Fact]
-    public void Non_partial_type_reports_TW1001()
+    public void Wrong_shape_reports_TW1001()
     {
+        var (result, _) = GeneratorTest.Run("""
+            using Typewright.Validation;
+
+            namespace Broken;
+
+            [DomainValue<string>]
+            public partial record struct NotReadonly;
+            """);
+
+        var diagnostic = Assert.Single(result.Diagnostics);
+        Assert.Equal("TW1001", diagnostic.Id);
+        Assert.Empty(result.GeneratedTrees);
+    }
+
+    [Fact]
+    public void Missing_partial_skips_generation_silently()
+    {
+        // Analyzer TW0003 owns the diagnostic; the generator must not double-report.
         var (result, _) = GeneratorTest.Run("""
             using Typewright.Validation;
 
@@ -104,8 +122,7 @@ public class DomainValueGeneratorTests
             public readonly record struct NotPartial;
             """);
 
-        var diagnostic = Assert.Single(result.Diagnostics);
-        Assert.Equal("TW1001", diagnostic.Id);
+        Assert.Empty(result.Diagnostics);
         Assert.Empty(result.GeneratedTrees);
     }
 

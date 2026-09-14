@@ -118,6 +118,28 @@ partial record {{name}} : {{V}}.IDomainModel<{{name}}, {{name}}.Dto>
 
             switch (property.Kind)
             {
+                case PropertyKind.Raw:
+                    if (property.Optional)
+                    {
+                        assignments.Append($"            {property.Name} = dto.{property.Name},\n");
+                    }
+                    else
+                    {
+                        blocks.Append($$"""
+        if (dto.{{property.Name}} is null)
+        {
+            errors.AddAt({{Literal(json)}}, {{V}}.ValidationErrorCodes.Required, "A value is required.");
+        }
+
+
+""");
+                        assignments.Append(property.DomainIsValueType
+                            ? $"            {property.Name} = dto.{property.Name}!.Value,\n"
+                            : $"            {property.Name} = dto.{property.Name}!,\n");
+                    }
+
+                    break;
+
                 case PropertyKind.Value or PropertyKind.Model when !property.Optional:
                     blocks.Append($$"""
         var {{camel}}Result = {{domain}}.TryCreate(dto.{{property.Name}});
@@ -280,6 +302,7 @@ partial record {{name}} : {{V}}.IDomainModel<{{name}}, {{name}}.Dto>
         {
             var expression = property.Kind switch
             {
+                PropertyKind.Raw => $"this.{property.Name}",
                 PropertyKind.Value => property.Optional
                     ? $"this.{property.Name}?.Value"
                     : $"this.{property.Name}.Value",

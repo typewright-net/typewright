@@ -33,6 +33,14 @@ public sealed class DomainValueAttribute<TRaw> : Attribute
 [AttributeUsage(AttributeTargets.Class, Inherited = false)]
 public sealed class DomainModelAttribute : Attribute;
 
+/// <summary>
+/// Marks a domain model property as intentionally raw: it is copied between the model and
+/// its DTO without validation. Without this attribute, a non-domain-typed property is
+/// still copied through but analyzer TW0004 warns about it.
+/// </summary>
+[AttributeUsage(AttributeTargets.Property, Inherited = false)]
+public sealed class RawAttribute : Attribute;
+
 /// <summary>Requires a string value to match a regular expression.</summary>
 [AttributeUsage(AttributeTargets.Struct, Inherited = false)]
 public sealed class PatternAttribute(string pattern) : Attribute

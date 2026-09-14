@@ -22,7 +22,7 @@ public sealed class DomainModelGenerator : IIncrementalGenerator
     {
         var results = context.SyntaxProvider.ForAttributeWithMetadataName(
             DomainModelAttributeMetadataName,
-            static (node, _) => node is RecordDeclarationSyntax,
+            static (node, _) => node is TypeDeclarationSyntax,
             static (ctx, ct) => Parse(ctx, ct));
 
         context.RegisterSourceOutput(results, static (productionContext, result) =>
@@ -54,7 +54,6 @@ public sealed class DomainModelGenerator : IIncrementalGenerator
 
         if (!symbol.IsRecord
             || symbol.TypeKind != TypeKind.Class
-            || !isPartial
             || symbol.Arity != 0
             || symbol.ContainingType is not null)
         {
@@ -63,32 +62,23 @@ public sealed class DomainModelGenerator : IIncrementalGenerator
             return new ParseResult(null, new EquatableArray<DiagnosticSpec>(diagnostics.ToArray()));
         }
 
+        if (!isPartial)
+        {
+            // Analyzer TW0003 reports this; just skip generation.
+            return new ParseResult(null, new EquatableArray<DiagnosticSpec>(diagnostics.ToArray()));
+        }
+
         var properties = new List<PropertySpec>();
         foreach (var member in symbol.GetMembers())
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (member is not IPropertySymbol property
-                || property.IsStatic
-                || property.IsIndexer
-                || property.DeclaredAccessibility != Accessibility.Public
-                || property.GetMethod is null
-                || property.SetMethod is null)
+                || !DomainTypeFacts.IsCandidateModelProperty(property))
             {
                 continue;
             }
 
-            var spec = ClassifyProperty(property);
-            if (spec is null)
-            {
-                diagnostics.Add(DiagnosticSpec.Create(
-                    DiagnosticDescriptors.UnsupportedModelProperty,
-                    property.Locations.FirstOrDefault() ?? location,
-                    property.Name,
-                    symbol.Name));
-                continue;
-            }
-
-            properties.Add(spec);
+            properties.Add(ClassifyProperty(property));
         }
 
         var model = new ModelSpec
@@ -100,68 +90,47 @@ public sealed class DomainModelGenerator : IIncrementalGenerator
             HintName = (symbol.ContainingNamespace.IsGlobalNamespace
                 ? symbol.Name
                 : symbol.ContainingNamespace.ToDisplayString() + "." + symbol.Name) + ".g.cs",
-            HasValidateHook = HasValidateHook(symbol),
+            HasValidateHook = DomainTypeFacts.HasValidateHook(symbol),
             Properties = new EquatableArray<PropertySpec>(properties.ToArray()),
         };
 
         return new ParseResult(model, new EquatableArray<DiagnosticSpec>(diagnostics.ToArray()));
     }
 
-    private static bool HasValidateHook(INamedTypeSymbol symbol)
-        => symbol.GetMembers("Validate").OfType<IMethodSymbol>().Any(method =>
-            method.IsStatic
-            && method.ReturnsVoid
-            && method.Parameters.Length == 2
-            && SymbolEqualityComparer.Default.Equals(method.Parameters[0].Type, symbol)
-            && method.Parameters[1].Type.ToDisplayString() == "Typewright.Validation.ValidationErrors");
-
-    private static PropertySpec? ClassifyProperty(IPropertySymbol property)
+    private static PropertySpec ClassifyProperty(IPropertySymbol property)
     {
-        var type = property.Type;
-        var optional = false;
+        var type = DomainTypeFacts.Unwrap(property.Type, out var optional);
 
-        if (type is INamedTypeSymbol nullable
-            && nullable.OriginalDefinition.SpecialType == SpecialType.System_Nullable_T)
+        if (DomainTypeFacts.CollectionElement(type) is { } element
+            && DomainTypeFacts.TryGetRawShape(element, out var elementIsModel) is { } elementRaw)
         {
-            optional = true;
-            type = nullable.TypeArguments[0];
-        }
-        else if (type.NullableAnnotation == NullableAnnotation.Annotated)
-        {
-            optional = true;
-            type = type.WithNullableAnnotation(NullableAnnotation.NotAnnotated);
-        }
-
-        PropertyKind kind;
-        ITypeSymbol domain;
-        string declaredDisplay;
-
-        if (type is INamedTypeSymbol collection
-            && collection.OriginalDefinition.ToDisplayString()
-                is "System.Collections.Generic.IReadOnlyList<T>" or "System.Collections.Generic.List<T>")
-        {
-            var element = collection.TypeArguments[0].WithNullableAnnotation(NullableAnnotation.NotAnnotated);
-            if (TryGetRawShape(element, out var elementIsModel) is not { } elementRaw)
-            {
-                return null;
-            }
-
-            kind = elementIsModel ? PropertyKind.ModelCollection : PropertyKind.ValueCollection;
-            domain = element;
-            declaredDisplay = collection.WithNullableAnnotation(NullableAnnotation.NotAnnotated)
-                .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            return Build(property, kind, domain, elementRaw, declaredDisplay, optional);
+            var collectionDisplay = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            return Build(
+                property,
+                elementIsModel ? PropertyKind.ModelCollection : PropertyKind.ValueCollection,
+                element,
+                elementRaw,
+                collectionDisplay,
+                optional);
         }
 
-        if (TryGetRawShape(type, out var isModel) is not { } rawShape)
+        if (DomainTypeFacts.TryGetRawShape(type, out var isModel) is { } rawShape)
         {
-            return null;
+            return Build(
+                property,
+                isModel ? PropertyKind.Model : PropertyKind.Value,
+                type,
+                rawShape,
+                type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                optional);
         }
 
-        kind = isModel ? PropertyKind.Model : PropertyKind.Value;
-        domain = type;
-        declaredDisplay = type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        return Build(property, kind, domain, rawShape, declaredDisplay, optional);
+        // Not a domain type: passthrough. Analyzer TW0004 warns unless the property is
+        // explicitly marked [Raw].
+        return Build(property, PropertyKind.Raw, type,
+            type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+            optional);
     }
 
     private static PropertySpec Build(
@@ -180,7 +149,7 @@ public sealed class DomainModelGenerator : IIncrementalGenerator
         var domainDisplay = domain.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
         var dtoType = kind switch
         {
-            PropertyKind.Value or PropertyKind.Model => rawOrDto + "?",
+            PropertyKind.Value or PropertyKind.Model or PropertyKind.Raw => rawOrDto + "?",
             _ => $"global::System.Collections.Generic.List<{rawOrDto}?>?",
         };
 
@@ -198,54 +167,6 @@ public sealed class DomainModelGenerator : IIncrementalGenerator
             DtoTypeDisplay = dtoType,
             DeclaredDisplay = declaredDisplay,
         };
-    }
-
-    /// <summary>
-    /// Resolves the raw shape backing a domain type: the raw type of a domain value, or the
-    /// DTO type of a domain model. Types still being generated in this compilation are
-    /// resolved from their attributes (by convention for model DTOs); already-compiled types
-    /// fall back to their contract interfaces.
-    /// </summary>
-    private static string? TryGetRawShape(ITypeSymbol type, out bool isModel)
-    {
-        isModel = false;
-        if (type is not INamedTypeSymbol named)
-        {
-            return null;
-        }
-
-        foreach (var attribute in named.GetAttributes())
-        {
-            var attributeName = attribute.AttributeClass?.OriginalDefinition.ToDisplayString();
-            if (attributeName == "Typewright.Validation.DomainValueAttribute<TRaw>"
-                && attribute.AttributeClass is { TypeArguments.Length: 1 } valueAttribute)
-            {
-                return valueAttribute.TypeArguments[0].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            }
-
-            if (attributeName == "Typewright.Validation.DomainModelAttribute")
-            {
-                isModel = true;
-                return named.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat) + ".Dto";
-            }
-        }
-
-        foreach (var contract in named.AllInterfaces)
-        {
-            var contractName = contract.OriginalDefinition.ToDisplayString();
-            if (contractName == "Typewright.Validation.IDomainValue<TSelf, TRaw>")
-            {
-                return contract.TypeArguments[1].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            }
-
-            if (contractName == "Typewright.Validation.IDomainModel<TSelf, TDto>")
-            {
-                isModel = true;
-                return contract.TypeArguments[1].ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-            }
-        }
-
-        return null;
     }
 
     private static string CamelCase(string name)

@@ -14,4 +14,7 @@
   <Folder Name="/samples/">
     <Project Path="samples/Billing.Api/Billing.Api.csproj" />
   </Folder>
+  <Folder Name="/benchmarks/">
+    <Project Path="benchmarks/Typewright.Validation.Benchmarks/Typewright.Validation.Benchmarks.csproj" />
+  </Folder>
 </Solution>

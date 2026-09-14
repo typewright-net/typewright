@@ -18,9 +18,12 @@ public static class ValidationProblems
 
     /// <summary>
     /// Builds the problem details for an exception: status 400, one <c>errors</c> entry per
-    /// path with all messages, and an <c>errorCodes</c> extension with the parallel codes.
+    /// path with all messages (localized when a localizer is given), and an
+    /// <c>errorCodes</c> extension with the parallel codes.
     /// </summary>
-    public static HttpValidationProblemDetails ToProblemDetails(DomainValidationException exception)
+    public static HttpValidationProblemDetails ToProblemDetails(
+        DomainValidationException exception,
+        IValidationMessageLocalizer? localizer = null)
     {
         ArgumentNullException.ThrowIfNull(exception);
 
@@ -34,7 +37,7 @@ public static class ValidationProblems
                 codes[error.Path] = [];
             }
 
-            pathMessages.Add(error.Message);
+            pathMessages.Add(localizer?.Localize(error) ?? error.Message);
             codes[error.Path].Add(error.Code);
         }
 
@@ -50,13 +53,15 @@ public static class ValidationProblems
 
     /// <summary>
     /// Writes the problem details to the response, composing with a registered
-    /// <see cref="IProblemDetailsService"/> when one is present.
+    /// <see cref="IProblemDetailsService"/> and <see cref="IValidationMessageLocalizer"/>
+    /// when present.
     /// </summary>
     public static async Task WriteAsync(HttpContext context, DomainValidationException exception)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var problem = ToProblemDetails(exception);
+        var problem = ToProblemDetails(
+            exception, context.RequestServices.GetService<IValidationMessageLocalizer>());
         context.Response.StatusCode = StatusCodes.Status400BadRequest;
 
         var problemDetailsService = context.RequestServices.GetService<IProblemDetailsService>();

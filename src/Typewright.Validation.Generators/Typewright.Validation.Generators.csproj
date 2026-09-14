@@ -5,6 +5,7 @@
     <ImplicitUsings>disable</ImplicitUsings>
     <IsRoslynComponent>true</IsRoslynComponent>
     <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Description>Incremental source generator and analyzers for Typewright domain validation: emits domain value implementations from [DomainValue] declarations.</Description>
   </PropertyGroup>
 

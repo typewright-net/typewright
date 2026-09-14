@@ -2,92 +2,197 @@
 
 Everything is a Type.
 
-## Getting started
+Typewright makes invalid domain data unrepresentable in application code and makes the
+HTTP boundary the place where raw input is turned into domain types. An endpoint's
+signature is written entirely in domain types; if the request cannot be turned into those
+types, the caller gets a 400 carrying *every* validation failure, and the endpoint body
+never runs:
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
-
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
-
-## Add your files
-
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
-
-```
-cd existing_repo
-git remote add origin https://gitlab.com/aaron.eshbach/typewright.git
-git branch -M main
-git push -uf origin main
+```csharp
+app.MapPut("/invoices/{id}", (InvoiceNumber id, BillingDocument doc, IBilling svc)
+    => svc.Upsert(id, doc));
 ```
 
-## Integrate with your tools
+## Packages
 
-* [Set up project integrations](https://gitlab.com/aaron.eshbach/typewright/-/settings/integrations)
+| Project | What it is |
+|---|---|
+| `Typewright.Validation` | Contracts and primitives: `IDomainValue<TSelf, TRaw>`, `IDomainModel<TSelf, TDto>`, `ValidationResult<T>`, path-scoped `ValidationErrors`, `DomainValidationException`, rule attributes, DTO-routed JSON converters, `DomainTypeInfo` descriptors. No dependencies beyond the BCL; usable entirely by hand. |
+| `Typewright.Validation.Generators` | Incremental source generator plus analyzers. Turns `[DomainValue<T>]` / `[DomainModel]` declarations into complete implementations and closes the `new`/`default`/`with` construction holes. |
+| `Typewright.Validation.AspNetCore` | Minimal API binding helpers, `UseTypewright()` middleware writing RFC 9457 `HttpValidationProblemDetails`, an `IExceptionHandler` alternative, OpenAPI transformers, and MVC model binders. |
 
-## Collaborate with your team
+## Field values
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+A field value wraps exactly one raw value and enforces its invariants. Declare the shape;
+the generator emits everything else:
 
-## Test and Deploy
+```csharp
+[DomainValue<string>]
+[Pattern(@"^I\d{9}$")]
+public readonly partial record struct InvoiceNumber;
 
-Use the built-in continuous integration in GitLab.
+[DomainValue<DateOnly>(Comparable = true)]
+public readonly partial record struct InvoiceDate;
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+[DomainValue<string>]
+[Length(1, 64), Normalize(Trim = true, Case = Casing.Upper)]
+public readonly partial record struct AccountNumber
+{
+    // Optional custom rule; runs after the attribute rules pass.
+    static partial void Validate(string value, ValidationErrors errors)
+    {
+        if (!Luhn.IsValid(value))
+        {
+            errors.Add("checksum", "The account number checksum is invalid.");
+        }
+    }
+}
+```
 
-***
+Generated per type: the `Value` accessor (with a runtime guard against `default` instances
+for reference raws), a private constructor, non-throwing `TryCreate` returning
+`ValidationResult<TSelf>`, throwing `Create`, `IParsable`/`ISpanParsable`,
+`IComparable` and operators when `Comparable = true`, an explicit conversion to the raw
+type, a JSON converter, a `TypeConverter`, a reflection-free `DomainTypeInfo` descriptor,
+and (when the project references the ASP.NET package) `BindAsync` for minimal API
+binding.
 
-# Editing this README
+Built-in rules: `Pattern`, `Length`, `Range` (integer, floating-point, or
+invariant-string bounds parsed with the raw type — for example
+`[Range("2000-01-01", "2099-12-31")]` on a `DateOnly`), `NotEmpty`, and `Normalize`.
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+`TryCreate` is the primitive and never throws, so callers can accumulate every failure;
+`Create` is sugar that throws one `DomainValidationException` carrying all of them. Input
+is nullable — "missing" is an ordinary `required` error, which is what lets a DTO with
+nullable fields feed the domain type directly.
 
-## Suggestions for a good README
+## Domain models
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+A domain model composes field values, other models, and collections of them:
 
-## Name
-Choose a self-explaining name for your project.
+```csharp
+[DomainModel]
+public sealed partial record BillingDocument
+{
+    public required InvoiceNumber InvoiceNumber { get; init; }
+    public required InvoiceDate InvoiceDate { get; init; }
+    public required AccountNumber AccountNumber { get; init; }
+    public Memo? Memo { get; init; }                                 // optional
+    public required IReadOnlyList<LineItem> LineItems { get; init; } // nested collection
+}
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+The generator emits a nested `Dto` record — the raw, serialization-friendly shape whose
+properties are all nullable — plus `TryCreate(Dto)`, `Create`, `ToDto()`, and a JSON
+converter routed through the DTO. Nullability drives required-ness. Validation collects
+*all* errors, keyed by the JSON path of the input shape (`invoiceNumber`,
+`lineItems[2].quantity`), before any cross-field rule runs.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+A model with a cross-field rule gets a private constructor, so it can only be built
+through the factories, plus typed `TryCreate`/`Create` factories over its fields:
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+```csharp
+[DomainModel]
+public sealed partial record BillingDocumentSearch
+{
+    public required InvoiceDate BeginDate { get; init; }
+    public required InvoiceDate EndDate { get; init; }
+    public required AccountNumber AccountNumber { get; init; }
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+    static partial void Validate(BillingDocumentSearch candidate, ValidationErrors errors)
+    {
+        if (candidate.EndDate < candidate.BeginDate)
+        {
+            errors.Add("date_range.invalid", "The end date must be on or after the begin date.");
+        }
+    }
+}
+```
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+Non-domain-typed properties are copied between model and DTO unvalidated; analyzer
+TW0004 warns unless the property is explicitly marked `[Raw]`.
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+## Analyzers
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+The analyzers ship in the generator package, so the default install closes the holes the
+type system cannot:
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+| Rule | Severity | Meaning |
+|---|---|---|
+| TW0001 | error | `new X()` or `default` of a `[DomainValue]` type bypasses validation |
+| TW0002 | error | `with` on a `[DomainModel]` with a cross-field rule bypasses it |
+| TW0003 | error | a `[DomainValue]`/`[DomainModel]` type is not `partial` |
+| TW0004 | warning | a model property is not domain-typed (silence with `[Raw]`) |
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+## ASP.NET Core
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+builder.Services.AddProblemDetails();
+builder.Services.AddOpenApi(options => options.AddTypewright());     // OpenAPI transformers
+builder.Services.AddControllers(options => options.AddTypewright()); // MVC model binders
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+var app = builder.Build();
+app.UseTypewright();   // DomainValidationException -> RFC 9457 response
 
-## License
-For open source projects, say how it is licensed.
+app.MapPut("/invoices/{id}", (InvoiceNumber id, BillingDocument doc, IBillingService svc)
+    => TypedResults.Ok(svc.Upsert(id, doc)));
+```
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Domain values bind from route/query/header, domain models from the JSON body via their
+DTO with every error accumulated. A failed bind throws; `UseTypewright()` (or the
+`AddTypewrightExceptionHandler()` alternative) turns it into a 400
+`HttpValidationProblemDetails`:
+
+```json
+{
+  "title": "One or more validation errors occurred.",
+  "status": 400,
+  "errors": {
+    "invoiceNumber": ["The value must match the pattern '^I\\d{9}$'."],
+    "lineItems[1].quantity": ["The value must be between 1 and 10000."]
+  },
+  "errorCodes": {
+    "invoiceNumber": ["pattern"],
+    "lineItems[1].quantity": ["range"]
+  }
+}
+```
+
+Because binding fails closed, forgetting `UseTypewright()` produces a 500 — never a
+handler running with default-valued domain types. Malformed JSON becomes a single
+`json.invalid` error at path `$`. Register an `IValidationMessageLocalizer` in DI to
+localize the messages; paths and codes stay stable.
+
+The OpenAPI transformers use the generated `DomainTypeInfo` descriptors: field values are
+documented as their raw primitive with `pattern`/`minLength`/`minimum`/`format`, models
+as their DTO schema, and every domain-typed operation gains the 400 response. MVC
+controllers get the same behavior through model binders that report into `ModelState`, so
+the `[ApiController]` automatic 400 has the same shape.
+
+## Repository layout
+
+```
+src/
+  Typewright.Validation/             contracts, errors, results, rules, JSON support
+  Typewright.Validation.Generators/  incremental generator + analyzers (netstandard2.0)
+  Typewright.Validation.AspNetCore/  binding, middleware, ProblemDetails, OpenAPI, MVC
+  Typewright.Actor/                  (later plan)
+  Typewright.Lattice/                (later plan)
+tests/                               xUnit v3 (dotnet test runs in MTP mode)
+samples/Billing.Api/                 the invoice example as a running minimal API + MVC app
+benchmarks/                          BenchmarkDotNet, DTO-to-domain transform
+docs/plans/                          design plans; 01 covers everything above
+```
+
+Build and test:
+
+```
+dotnet build Typewright.slnx
+dotnet test --solution Typewright.slnx
+dotnet run -c Release --project benchmarks/Typewright.Validation.Benchmarks -- --filter *
+```
+
+The DTO-to-domain transform for a fully valid 20-field document runs in roughly 160 ns
+(about 1.5 KB allocated); the accumulate-everything failure case with eight invalid
+fields runs in roughly 330 ns.

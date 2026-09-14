@@ -16,23 +16,25 @@ public class DomainValueTests
     }
 
     [Theory]
-    [InlineData(null, ValidationErrorCodes.Required)]
-    [InlineData("ab", ValidationErrorCodes.Pattern)]
-    [InlineData("ABCD", ValidationErrorCodes.Pattern)]
-    public void TryCreate_rejects_invalid_input(string? input, string expectedCode)
+    [InlineData(null, typeof(RequiredError))]
+    [InlineData("ab", typeof(PatternError))]
+    [InlineData("ABCD", typeof(PatternError))]
+    public void TryCreate_rejects_invalid_input(string? input, Type expectedError)
     {
         var result = TestCode.TryCreate(input);
 
         Assert.False(result.IsValid);
-        Assert.Equal(expectedCode, Assert.Single(result.Errors).Code);
+        Assert.IsType(expectedError, Assert.Single(result.Errors).Error);
     }
 
     [Fact]
-    public void Create_throws_with_the_validation_errors()
+    public void Create_throws_with_the_typed_errors()
     {
         var exception = Assert.Throws<DomainValidationException>(() => TestCode.Create("nope"));
 
-        Assert.Equal(ValidationErrorCodes.Pattern, Assert.Single(exception.Errors).Code);
+        var failure = Assert.Single(exception.Errors);
+        var pattern = Assert.IsType<PatternError>(failure.Error);
+        Assert.Equal("^[A-Z]{3}$", pattern.Pattern);
     }
 
     [Fact]
@@ -56,7 +58,7 @@ public class DomainValueJsonConverterTests
         var exception = Assert.Throws<DomainValidationException>(
             () => JsonSerializer.Deserialize<TestCode>("\"nope\""));
 
-        Assert.Equal(ValidationErrorCodes.Pattern, Assert.Single(exception.Errors).Code);
+        Assert.IsType<PatternError>(Assert.Single(exception.Errors).Error);
     }
 
     [Fact]
@@ -65,7 +67,7 @@ public class DomainValueJsonConverterTests
         var exception = Assert.Throws<DomainValidationException>(
             () => JsonSerializer.Deserialize<TestCode>("null"));
 
-        Assert.Equal(ValidationErrorCodes.Required, Assert.Single(exception.Errors).Code);
+        Assert.IsType<RequiredError>(Assert.Single(exception.Errors).Error);
     }
 
     [Fact]

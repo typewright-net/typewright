@@ -41,6 +41,19 @@ public sealed class DomainModelAttribute : Attribute;
 [AttributeUsage(AttributeTargets.Property, Inherited = false)]
 public sealed class RawAttribute : Attribute;
 
+/// <summary>
+/// Declares that this domain type's custom <c>Validate</c> hook may report
+/// <typeparamref name="TError"/>. Rule attributes imply their built-in error types
+/// automatically; every hook-reported error type must be declared here, which is what
+/// keeps the type's error set finite by construction. The generator folds declared types
+/// into <c>DomainTypeInfo.ErrorTypes</c> and the generated <c>MatchError</c>; analyzer
+/// TW0005 flags hooks reporting undeclared error types.
+/// </summary>
+/// <typeparam name="TError">An error type the hook may report.</typeparam>
+[AttributeUsage(AttributeTargets.Struct | AttributeTargets.Class, Inherited = false, AllowMultiple = true)]
+public sealed class ReportsAttribute<TError> : Attribute
+    where TError : IDomainError;
+
 /// <summary>Requires a string value to match a regular expression.</summary>
 [AttributeUsage(AttributeTargets.Struct, Inherited = false)]
 public sealed class PatternAttribute(string pattern) : Attribute

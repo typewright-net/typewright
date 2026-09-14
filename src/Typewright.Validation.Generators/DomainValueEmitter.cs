@@ -183,7 +183,7 @@ readonly partial record struct {{name}} : {{interfaces}}
                 rules.Append($$"""
         if (!s_pattern.IsMatch(value))
         {
-            errors.Add({{V}}.ValidationErrorCodes.Pattern, {{Literal($"The value must match the pattern '{spec.Pattern}'.")}});
+            errors.Add(new {{V}}.PatternError({{Literal(spec.Pattern)}}));
         }
 
 
@@ -195,7 +195,7 @@ readonly partial record struct {{name}} : {{interfaces}}
                 rules.Append($$"""
         if (value.Length is < {{spec.LengthMin}} or > {{spec.LengthMax}})
         {
-            errors.Add({{V}}.ValidationErrorCodes.Length, {{Literal($"The value must be between {spec.LengthMin} and {spec.LengthMax} characters long.")}});
+            errors.Add(new {{V}}.LengthError({{spec.LengthMin}}, {{spec.LengthMax}}, value.Length));
         }
 
 
@@ -207,7 +207,7 @@ readonly partial record struct {{name}} : {{interfaces}}
                 rules.Append($$"""
         if (string.IsNullOrWhiteSpace(value))
         {
-            errors.Add({{V}}.ValidationErrorCodes.NotEmpty, "The value must not be blank.");
+            errors.Add(new {{V}}.NotEmptyError());
         }
 
 
@@ -219,7 +219,7 @@ readonly partial record struct {{name}} : {{interfaces}}
             rules.Append($$"""
         if (value.CompareTo({{spec.RangeMinExpr}}) < 0 || value.CompareTo({{spec.RangeMaxExpr}}) > 0)
         {
-            errors.Add({{V}}.ValidationErrorCodes.Range, {{Literal($"The value must be between {spec.RangeMinDisplay} and {spec.RangeMaxDisplay}.")}});
+            errors.Add(new {{V}}.RangeError({{Literal(spec.RangeMinDisplay!)}}, {{Literal(spec.RangeMaxDisplay!)}}, ((global::System.IFormattable)value).ToString(null, {{Invariant}})));
         }
 
 
@@ -236,7 +236,7 @@ readonly partial record struct {{name}} : {{interfaces}}
         var errors = new {{V}}.ValidationErrors();
         if (value is null)
         {
-            errors.Add({{V}}.ValidationErrorCodes.Required, "A value is required.");
+            errors.Add(new {{V}}.RequiredError());
             return {{result}}.Failure(errors);
         }
 
@@ -278,7 +278,7 @@ readonly partial record struct {{name}} : {{interfaces}}
     /// <summary>Nullable-raw overload so nullable DTO properties bind directly; null is a <c>required</c> error.</summary>
     public static {{result}} TryCreate({{raw}}? value)
         => value is null
-            ? {{result}}.Failure(string.Empty, {{V}}.ValidationErrorCodes.Required, "A value is required.")
+            ? {{result}}.Failure(string.Empty, new {{V}}.RequiredError())
             : TryCreate(value.Value);
 
     /// <summary>Validates <paramref name="value"/> and returns the value, or throws <see cref="{{V}}.DomainValidationException"/>.</summary>
@@ -449,10 +449,13 @@ readonly partial record struct {{name}} : {{interfaces}}
         DomainType = typeof({{spec.Name}}),
         RawType = typeof({{spec.RawDisplay}}),
         Rules = {{rulesExpression}},
+        ErrorTypes = {{ErrorSetEmitter.ErrorTypesExpression(spec.ErrorTypes)}},
     };
 
 
 """);
+
+        body.Append(ErrorSetEmitter.EmitMatchError(spec.ErrorTypes));
     }
 
     private static void EmitTypeConverter(StringBuilder body, ValueSpec spec)

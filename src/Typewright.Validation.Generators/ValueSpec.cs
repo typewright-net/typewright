@@ -75,4 +75,7 @@ internal sealed record ValueSpec
     public string? RangeMinParseText { get; init; }
 
     public string? RangeMaxParseText { get; init; }
+
+    /// <summary>The finite error set, sorted by simple name.</summary>
+    public EquatableArray<ErrorTypeSpec> ErrorTypes { get; init; } = EquatableArray<ErrorTypeSpec>.Empty;
 }

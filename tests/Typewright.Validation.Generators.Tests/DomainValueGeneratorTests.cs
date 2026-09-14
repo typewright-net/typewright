@@ -16,15 +16,18 @@ public class DomainValueGeneratorTests
         [Pattern(@"^I\d{9}$")]
         public readonly partial record struct InvoiceNumber;
 
+        public sealed record ForbiddenPrefixError : IDomainError;
+
         [DomainValue<string>]
         [Length(1, 64), NotEmpty, Normalize(Trim = true, Case = Casing.Upper)]
+        [Reports<ForbiddenPrefixError>]
         public readonly partial record struct AccountNumber
         {
             static partial void Validate(string value, ValidationErrors errors)
             {
                 if (value.StartsWith("X", StringComparison.Ordinal))
                 {
-                    errors.Add("custom", "No X accounts.");
+                    errors.Add(new ForbiddenPrefixError());
                 }
             }
         }

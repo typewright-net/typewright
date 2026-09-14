@@ -21,21 +21,22 @@ public class ValidationResultTests
     [Fact]
     public void Failure_exposes_errors_and_hides_value()
     {
-        var result = ValidationResult<int>.Failure("path", "code", "message");
+        var result = ValidationResult<int>.Failure("path", new RequiredError());
 
         Assert.False(result.IsValid);
         Assert.Throws<InvalidOperationException>(() => result.Value);
         Assert.False(result.TryGet(out _));
-        var error = Assert.Single(result.Errors);
-        Assert.Equal(new ValidationError("path", "code", "message"), error);
+        var failure = Assert.Single(result.Errors);
+        Assert.Equal("path", failure.Path);
+        Assert.IsType<RequiredError>(failure.Error);
     }
 
     [Fact]
     public void OrThrow_on_failure_carries_all_errors()
     {
         var errors = new ValidationErrors();
-        errors.Add("one", "First failure.");
-        errors.Add("two", "Second failure.");
+        errors.AddAt("one", new RequiredError());
+        errors.AddAt("two", new NotEmptyError());
 
         var exception = Assert.Throws<DomainValidationException>(
             () => ValidationResult<int>.Failure(errors).OrThrow());

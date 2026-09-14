@@ -37,15 +37,12 @@ public static class TypewrightBinding
                 return ValueTask.FromResult<TValue?>(null);
             }
 
-            throw new DomainValidationException(name, ValidationErrorCodes.Required, $"The '{name}' parameter is required.");
+            throw new DomainValidationException(name, new RequiredError());
         }
 
         if (!TRaw.TryParse(raw, CultureInfo.InvariantCulture, out var rawValue))
         {
-            throw new DomainValidationException(
-                name,
-                ValidationErrorCodes.Format,
-                $"The value '{raw}' could not be parsed as {typeof(TRaw).Name}.");
+            throw new DomainValidationException(name, new FormatError(raw, typeof(TRaw).Name));
         }
 
         var result = TValue.TryCreate(rawValue);
@@ -86,15 +83,12 @@ public static class TypewrightBinding
         }
         catch (JsonException exception)
         {
-            throw new DomainValidationException(
-                "$",
-                ValidationErrorCodes.JsonInvalid,
-                $"The request body is not valid JSON: {exception.Message}");
+            throw new DomainValidationException("$", new JsonInvalidError(exception.Message));
         }
 
         if (dto is null)
         {
-            throw new DomainValidationException("$", ValidationErrorCodes.Required, "A request body is required.");
+            throw new DomainValidationException("$", new RequiredError());
         }
 
         return TModel.TryCreate(dto) switch

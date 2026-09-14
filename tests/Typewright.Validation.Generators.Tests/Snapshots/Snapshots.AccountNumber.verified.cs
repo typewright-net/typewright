@@ -21,7 +21,7 @@ namespace Snapshots
             var errors = new global::Typewright.Validation.ValidationErrors();
             if (value is null)
             {
-                errors.Add(global::Typewright.Validation.ValidationErrorCodes.Required, "A value is required.");
+                errors.Add(new global::Typewright.Validation.RequiredError());
                 return global::Typewright.Validation.ValidationResult<AccountNumber>.Failure(errors);
             }
 
@@ -30,12 +30,12 @@ namespace Snapshots
 
             if (value.Length is < 1 or > 64)
             {
-                errors.Add(global::Typewright.Validation.ValidationErrorCodes.Length, "The value must be between 1 and 64 characters long.");
+                errors.Add(new global::Typewright.Validation.LengthError(1, 64, value.Length));
             }
 
             if (string.IsNullOrWhiteSpace(value))
             {
-                errors.Add(global::Typewright.Validation.ValidationErrorCodes.NotEmpty, "The value must not be blank.");
+                errors.Add(new global::Typewright.Validation.NotEmptyError());
             }
 
             if (errors.Count == 0)
@@ -89,7 +89,28 @@ namespace Snapshots
                 new global::Typewright.Validation.DomainRuleInfo { Kind = "length", MinLength = 1, MaxLength = 64 },
                 new global::Typewright.Validation.DomainRuleInfo { Kind = "not_empty" },
             },
+            ErrorTypes = new global::System.Type[] { typeof(global::Snapshots.ForbiddenPrefixError), typeof(global::Typewright.Validation.LengthError), typeof(global::Typewright.Validation.NotEmptyError), typeof(global::Typewright.Validation.RequiredError) },
         };
+
+        /// <summary>
+        /// Exhaustively handles an error from this type's finite error set: one handler per
+        /// possible error type. When the set grows, every call site fails to compile until
+        /// the new case is handled.
+        /// </summary>
+        public static TResult MatchError<TResult>(
+            global::Typewright.Validation.IDomainError error,
+            global::System.Func<global::Snapshots.ForbiddenPrefixError, TResult> forbiddenPrefix,
+            global::System.Func<global::Typewright.Validation.LengthError, TResult> length,
+            global::System.Func<global::Typewright.Validation.NotEmptyError, TResult> notEmpty,
+            global::System.Func<global::Typewright.Validation.RequiredError, TResult> required)
+            => error switch
+            {
+                global::Snapshots.ForbiddenPrefixError matched0 => forbiddenPrefix(matched0),
+                global::Typewright.Validation.LengthError matched1 => length(matched1),
+                global::Typewright.Validation.NotEmptyError matched2 => notEmpty(matched2),
+                global::Typewright.Validation.RequiredError matched3 => required(matched3),
+                _ => throw new global::System.ArgumentOutOfRangeException(nameof(error), error?.GetType().FullName, "The error is not part of this domain type's error set."),
+            };
 
         /// <summary>Converts from string and raw values for components that still use TypeConverter.</summary>
         public sealed class DomainTypeConverter : global::System.ComponentModel.TypeConverter

@@ -1,5 +1,6 @@
 using System.Globalization;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Typewright.Validation.AspNetCore.Mvc;
 
@@ -22,6 +23,8 @@ public sealed class DomainValueModelBinder<TValue, TRaw> : IModelBinder
             ? bindingContext.FieldName
             : bindingContext.ModelName;
         var providerResult = bindingContext.ValueProvider.GetValue(name);
+        var renderer = bindingContext.HttpContext.RequestServices.GetService<IDomainErrorRenderer>()
+            ?? DefaultDomainErrorRenderer.Instance;
 
         if (providerResult == ValueProviderResult.None
             || string.IsNullOrEmpty(providerResult.FirstValue))
@@ -29,7 +32,7 @@ public sealed class DomainValueModelBinder<TValue, TRaw> : IModelBinder
             // A missing optional binds as null; a missing required value is an error.
             if (!bindingContext.ModelMetadata.IsReferenceOrNullableType)
             {
-                bindingContext.ModelState.TryAddModelError(name, "A value is required.");
+                AddError(new ValidationFailure(name, new RequiredError()));
             }
 
             return Task.CompletedTask;
@@ -40,18 +43,16 @@ public sealed class DomainValueModelBinder<TValue, TRaw> : IModelBinder
 
         if (!TRaw.TryParse(raw, CultureInfo.InvariantCulture, out var rawValue))
         {
-            bindingContext.ModelState.TryAddModelError(
-                name, $"The value '{raw}' could not be parsed as {typeof(TRaw).Name}.");
+            AddError(new ValidationFailure(name, new FormatError(raw, typeof(TRaw).Name)));
             return Task.CompletedTask;
         }
 
         var validation = TValue.TryCreate(rawValue);
         if (!validation.IsValid)
         {
-            foreach (var error in validation.Errors)
+            foreach (var failure in validation.Errors)
             {
-                bindingContext.ModelState.TryAddModelError(
-                    ValidationErrors.CombinePath(name, error.Path), error.Message);
+                AddError(failure with { Path = ValidationErrors.CombinePath(name, failure.Path) });
             }
 
             return Task.CompletedTask;
@@ -59,5 +60,8 @@ public sealed class DomainValueModelBinder<TValue, TRaw> : IModelBinder
 
         bindingContext.Result = ModelBindingResult.Success(validation.Value);
         return Task.CompletedTask;
+
+        void AddError(ValidationFailure failure)
+            => bindingContext.ModelState.TryAddModelError(failure.Path, renderer.Render(failure));
     }
 }

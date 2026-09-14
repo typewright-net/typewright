@@ -20,7 +20,10 @@ public class TypewrightAnalyzerTests
         [DomainValue<DateOnly>(Comparable = true)]
         public readonly partial record struct When;
 
+        public sealed record InvalidWindowError : IDomainError;
+
         [DomainModel]
+        [Reports<InvalidWindowError>]
         public sealed partial record Window
         {
             public required When Begin { get; init; }
@@ -30,7 +33,7 @@ public class TypewrightAnalyzerTests
             {
                 if (candidate.End < candidate.Begin)
                 {
-                    errors.Add("window.invalid", "End before begin.");
+                    errors.Add(new InvalidWindowError());
                 }
             }
         }

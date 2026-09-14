@@ -24,6 +24,14 @@ public sealed class DomainTypeInfo
 
     /// <summary>For domain models: the composed fields, in declaration order.</summary>
     public IReadOnlyList<DomainFieldInfo> Fields { get; init; } = [];
+
+    /// <summary>
+    /// The finite set of <see cref="IDomainError"/> types that turning raw input into
+    /// this domain type can produce: the binding errors, the rule-implied errors, the
+    /// types declared with <c>[Reports&lt;TError&gt;]</c>, and (for models) the union of
+    /// the composed fields' sets. Sorted by code.
+    /// </summary>
+    public IReadOnlyList<Type> ErrorTypes { get; init; } = [];
 }
 
 /// <summary>One composed field of a domain model.</summary>

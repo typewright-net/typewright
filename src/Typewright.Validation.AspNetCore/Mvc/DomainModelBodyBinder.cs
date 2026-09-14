@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Typewright.Validation.AspNetCore.Mvc;
 
@@ -18,12 +19,13 @@ public sealed class DomainModelBodyBinder<TModel, TDto> : IModelBinder
     {
         ArgumentNullException.ThrowIfNull(bindingContext);
         var request = bindingContext.HttpContext.Request;
-        var modelState = bindingContext.ModelState;
         var prefix = bindingContext.ModelName;
+        var renderer = bindingContext.HttpContext.RequestServices.GetService<IDomainErrorRenderer>()
+            ?? DefaultDomainErrorRenderer.Instance;
 
         if (!request.HasJsonContentType())
         {
-            modelState.TryAddModelError(
+            bindingContext.ModelState.TryAddModelError(
                 ValidationErrors.CombinePath(prefix, "$"),
                 "The request body must have a JSON content type.");
             return;
@@ -36,31 +38,32 @@ public sealed class DomainModelBodyBinder<TModel, TDto> : IModelBinder
         }
         catch (JsonException exception)
         {
-            modelState.TryAddModelError(
-                ValidationErrors.CombinePath(prefix, "$"),
-                $"The request body is not valid JSON: {exception.Message}");
+            AddError(new ValidationFailure(
+                ValidationErrors.CombinePath(prefix, "$"), new JsonInvalidError(exception.Message)));
             return;
         }
 
         if (dto is null)
         {
-            modelState.TryAddModelError(
-                ValidationErrors.CombinePath(prefix, "$"), "A request body is required.");
+            AddError(new ValidationFailure(
+                ValidationErrors.CombinePath(prefix, "$"), new RequiredError()));
             return;
         }
 
         var validation = TModel.TryCreate(dto);
         if (!validation.IsValid)
         {
-            foreach (var error in validation.Errors)
+            foreach (var failure in validation.Errors)
             {
-                modelState.TryAddModelError(
-                    ValidationErrors.CombinePath(prefix, error.Path), error.Message);
+                AddError(failure with { Path = ValidationErrors.CombinePath(prefix, failure.Path) });
             }
 
             return;
         }
 
         bindingContext.Result = ModelBindingResult.Success(validation.Value);
+
+        void AddError(ValidationFailure failure)
+            => bindingContext.ModelState.TryAddModelError(failure.Path, renderer.Render(failure));
     }
 }

@@ -173,6 +173,11 @@ public sealed class DomainValueGenerator : IIncrementalGenerator
             }
         }
 
+        spec = spec with
+        {
+            ErrorTypes = new EquatableArray<ErrorTypeSpec>(DomainTypeFacts.ComputeErrorTypes(symbol).ToArray()),
+        };
+
         return new ParseResult(spec, new EquatableArray<DiagnosticSpec>(diagnostics.ToArray()));
 
         bool RequireStringRaw(string attributeName)

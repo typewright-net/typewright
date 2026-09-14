@@ -69,4 +69,7 @@ internal sealed record ModelSpec
     public bool EmitBindAsync { get; init; }
 
     public EquatableArray<PropertySpec> Properties { get; init; } = EquatableArray<PropertySpec>.Empty;
+
+    /// <summary>The finite error set (own plus composed fields'), sorted by simple name.</summary>
+    public EquatableArray<ErrorTypeSpec> ErrorTypes { get; init; } = EquatableArray<ErrorTypeSpec>.Empty;
 }

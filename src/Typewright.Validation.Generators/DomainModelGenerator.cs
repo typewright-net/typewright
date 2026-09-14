@@ -96,6 +96,7 @@ public sealed class DomainModelGenerator : IIncrementalGenerator
             HasValidateHook = DomainTypeFacts.HasValidateHook(symbol),
             UserDeclaredBindAsync = symbol.GetMembers("BindAsync").Any(member => member.IsStatic),
             Properties = new EquatableArray<PropertySpec>(properties.ToArray()),
+            ErrorTypes = new EquatableArray<ErrorTypeSpec>(DomainTypeFacts.ComputeErrorTypes(symbol).ToArray()),
         };
 
         return new ParseResult(model, new EquatableArray<DiagnosticSpec>(diagnostics.ToArray()));

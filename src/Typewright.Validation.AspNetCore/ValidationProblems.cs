@@ -18,27 +18,28 @@ public static class ValidationProblems
 
     /// <summary>
     /// Builds the problem details for an exception: status 400, one <c>errors</c> entry per
-    /// path with all messages (localized when a localizer is given), and an
-    /// <c>errorCodes</c> extension with the parallel codes.
+    /// path with all messages (rendered by <paramref name="renderer"/>, or the errors'
+    /// default text), and an <c>errorCodes</c> extension with the parallel typed codes.
     /// </summary>
     public static HttpValidationProblemDetails ToProblemDetails(
         DomainValidationException exception,
-        IValidationMessageLocalizer? localizer = null)
+        IDomainErrorRenderer? renderer = null)
     {
         ArgumentNullException.ThrowIfNull(exception);
+        renderer ??= DefaultDomainErrorRenderer.Instance;
 
         var messages = new Dictionary<string, List<string>>();
         var codes = new Dictionary<string, List<string>>();
-        foreach (var error in exception.Errors)
+        foreach (var failure in exception.Errors)
         {
-            if (!messages.TryGetValue(error.Path, out var pathMessages))
+            if (!messages.TryGetValue(failure.Path, out var pathMessages))
             {
-                messages[error.Path] = pathMessages = [];
-                codes[error.Path] = [];
+                messages[failure.Path] = pathMessages = [];
+                codes[failure.Path] = [];
             }
 
-            pathMessages.Add(localizer?.Localize(error) ?? error.Message);
-            codes[error.Path].Add(error.Code);
+            pathMessages.Add(renderer.Render(failure));
+            codes[failure.Path].Add(failure.Error.Code);
         }
 
         var problem = new HttpValidationProblemDetails(
@@ -53,7 +54,7 @@ public static class ValidationProblems
 
     /// <summary>
     /// Writes the problem details to the response, composing with a registered
-    /// <see cref="IProblemDetailsService"/> and <see cref="IValidationMessageLocalizer"/>
+    /// <see cref="IProblemDetailsService"/> and <see cref="IDomainErrorRenderer"/>
     /// when present.
     /// </summary>
     public static async Task WriteAsync(HttpContext context, DomainValidationException exception)
@@ -61,7 +62,7 @@ public static class ValidationProblems
         ArgumentNullException.ThrowIfNull(context);
 
         var problem = ToProblemDetails(
-            exception, context.RequestServices.GetService<IValidationMessageLocalizer>());
+            exception, context.RequestServices.GetService<IDomainErrorRenderer>());
         context.Response.StatusCode = StatusCodes.Status400BadRequest;
 
         var problemDetailsService = context.RequestServices.GetService<IProblemDetailsService>();

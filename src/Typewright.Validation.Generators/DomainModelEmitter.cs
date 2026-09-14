@@ -149,7 +149,7 @@ partial record {{name}} : {{interfaces}}
                         blocks.Append($$"""
         if (dto.{{property.Name}} is null)
         {
-            errors.AddAt({{Literal(json)}}, {{V}}.ValidationErrorCodes.Required, "A value is required.");
+            errors.AddAt({{Literal(json)}}, new {{V}}.RequiredError());
         }
 
 
@@ -231,7 +231,7 @@ partial record {{name}} : {{interfaces}}
         global::System.Collections.Generic.List<{{domain}}>? {{camel}}List = null;
         if (dto.{{property.Name}} is null)
         {
-            errors.AddAt({{Literal(json)}}, {{V}}.ValidationErrorCodes.Required, "A value is required.");
+            errors.AddAt({{Literal(json)}}, new {{V}}.RequiredError());
         }
         else
         {
@@ -257,7 +257,7 @@ partial record {{name}} : {{interfaces}}
     {
         if (dto is null)
         {
-            return {{result}}.Failure(string.Empty, {{V}}.ValidationErrorCodes.Required, "A value is required.");
+            return {{result}}.Failure(string.Empty, new {{V}}.RequiredError());
         }
 
         var errors = new {{V}}.ValidationErrors();
@@ -382,10 +382,13 @@ partial record {{name}} : {{interfaces}}
         RawType = typeof(Dto),
         IsModel = true,
         Fields = {{fieldsExpression}},
+        ErrorTypes = {{ErrorSetEmitter.ErrorTypesExpression(spec.ErrorTypes)}},
     };
 
 
 """);
+
+        body.Append(ErrorSetEmitter.EmitMatchError(spec.ErrorTypes));
     }
 
     private static string Literal(string value) => SymbolDisplay.FormatLiteral(value, quote: true);

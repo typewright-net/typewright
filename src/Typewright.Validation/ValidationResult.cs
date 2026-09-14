@@ -60,10 +60,10 @@ public readonly struct ValidationResult<T>
     }
 
     /// <summary>Creates a failed result carrying a single error.</summary>
-    public static ValidationResult<T> Failure(string path, string code, string message)
+    public static ValidationResult<T> Failure(string path, IDomainError error)
     {
         var errors = new ValidationErrors();
-        errors.AddAt(path, code, message);
+        errors.AddAt(path, error);
         return Failure(errors);
     }
 }

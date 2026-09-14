@@ -3,56 +3,83 @@ using System.Collections;
 namespace Typewright.Validation;
 
 /// <summary>
-/// An accumulating collection of <see cref="ValidationError"/> values with path scoping.
-/// Nested models push a path segment (for example <c>lineItems[2]</c>) so child errors are
-/// prefixed with their location without the child knowing where it sits.
+/// An accumulating collection of <see cref="ValidationFailure"/> values with path
+/// scoping. Nested models push a path segment (for example <c>lineItems[2]</c>) so child
+/// failures are prefixed with their location without the child knowing where it sits.
 /// </summary>
-public sealed class ValidationErrors : IReadOnlyList<ValidationError>
+public sealed class ValidationErrors : IReadOnlyList<ValidationFailure>
 {
-    private readonly List<ValidationError> _errors = [];
+    private readonly List<ValidationFailure> _failures = [];
     private string _currentPath = string.Empty;
 
     /// <inheritdoc />
-    public int Count => _errors.Count;
+    public int Count => _failures.Count;
 
     /// <inheritdoc />
-    public ValidationError this[int index] => _errors[index];
+    public ValidationFailure this[int index] => _failures[index];
 
     /// <summary>Adds an error at the current path scope.</summary>
-    public void Add(string code, string message) => AddAt(string.Empty, code, message);
+    public void Add(IDomainError error) => AddAt(string.Empty, error);
 
     /// <summary>Adds an error at <paramref name="relativePath"/> below the current path scope.</summary>
-    public void AddAt(string relativePath, string code, string message)
+    public void AddAt(string relativePath, IDomainError error)
     {
         ArgumentNullException.ThrowIfNull(relativePath);
-        ArgumentException.ThrowIfNullOrEmpty(code);
-        ArgumentNullException.ThrowIfNull(message);
-        _errors.Add(new ValidationError(CombinePath(_currentPath, relativePath), code, message));
+        ArgumentNullException.ThrowIfNull(error);
+        _failures.Add(new ValidationFailure(CombinePath(_currentPath, relativePath), error));
     }
 
-    /// <summary>Adds an error, treating its path as relative to the current path scope.</summary>
-    public void Add(ValidationError error)
-        => _errors.Add(error with { Path = CombinePath(_currentPath, error.Path) });
+    /// <summary>Adds a failure, treating its path as relative to the current path scope.</summary>
+    public void Add(ValidationFailure failure)
+        => _failures.Add(failure with { Path = CombinePath(_currentPath, failure.Path) });
 
-    /// <summary>Copies all errors from <paramref name="other"/>, prefixing them with the current path scope.</summary>
+    /// <summary>Copies all failures from <paramref name="other"/>, prefixing them with the current path scope.</summary>
     public void Merge(ValidationErrors other)
     {
         ArgumentNullException.ThrowIfNull(other);
-        foreach (var error in other._errors)
+        foreach (var failure in other._failures)
         {
-            Add(error);
+            Add(failure);
         }
     }
 
     /// <summary>
-    /// Copies all errors from <paramref name="other"/>, prefixing them with the current path
-    /// scope followed by <paramref name="relativePath"/>.
+    /// Copies all failures from <paramref name="other"/>, prefixing them with the current
+    /// path scope followed by <paramref name="relativePath"/>.
     /// </summary>
     public void Merge(string relativePath, ValidationErrors other)
     {
         using (PushPath(relativePath))
         {
             Merge(other);
+        }
+    }
+
+    /// <summary>Whether any failure carries an error of type <typeparamref name="TError"/>.</summary>
+    public bool Contains<TError>()
+        where TError : IDomainError
+    {
+        foreach (var failure in _failures)
+        {
+            if (failure.Error is TError)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>The failures whose error is of type <typeparamref name="TError"/>.</summary>
+    public IEnumerable<ValidationFailure> OfType<TError>()
+        where TError : IDomainError
+    {
+        foreach (var failure in _failures)
+        {
+            if (failure.Error is TError)
+            {
+                yield return failure;
+            }
         }
     }
 
@@ -90,7 +117,7 @@ public sealed class ValidationErrors : IReadOnlyList<ValidationError>
     }
 
     /// <inheritdoc />
-    public IEnumerator<ValidationError> GetEnumerator() => _errors.GetEnumerator();
+    public IEnumerator<ValidationFailure> GetEnumerator() => _failures.GetEnumerator();
 
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 

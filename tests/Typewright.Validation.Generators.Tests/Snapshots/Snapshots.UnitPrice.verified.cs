@@ -21,7 +21,7 @@ namespace Snapshots
             var errors = new global::Typewright.Validation.ValidationErrors();
             if (value.CompareTo(0m) < 0 || value.CompareTo(1000000m) > 0)
             {
-                errors.Add(global::Typewright.Validation.ValidationErrorCodes.Range, "The value must be between 0 and 1000000.");
+                errors.Add(new global::Typewright.Validation.RangeError("0", "1000000", ((global::System.IFormattable)value).ToString(null, global::System.Globalization.CultureInfo.InvariantCulture)));
             }
 
             if (errors.Count == 0)
@@ -37,7 +37,7 @@ namespace Snapshots
         /// <summary>Nullable-raw overload so nullable DTO properties bind directly; null is a <c>required</c> error.</summary>
         public static global::Typewright.Validation.ValidationResult<UnitPrice> TryCreate(decimal? value)
             => value is null
-                ? global::Typewright.Validation.ValidationResult<UnitPrice>.Failure(string.Empty, global::Typewright.Validation.ValidationErrorCodes.Required, "A value is required.")
+                ? global::Typewright.Validation.ValidationResult<UnitPrice>.Failure(string.Empty, new global::Typewright.Validation.RequiredError())
                 : TryCreate(value.Value);
 
         /// <summary>Validates <paramref name="value"/> and returns the value, or throws <see cref="global::Typewright.Validation.DomainValidationException"/>.</summary>
@@ -101,7 +101,26 @@ namespace Snapshots
             {
                 new global::Typewright.Validation.DomainRuleInfo { Kind = "range", Minimum = 0m, Maximum = 1000000m },
             },
+            ErrorTypes = new global::System.Type[] { typeof(global::Typewright.Validation.FormatError), typeof(global::Typewright.Validation.RangeError), typeof(global::Typewright.Validation.RequiredError) },
         };
+
+        /// <summary>
+        /// Exhaustively handles an error from this type's finite error set: one handler per
+        /// possible error type. When the set grows, every call site fails to compile until
+        /// the new case is handled.
+        /// </summary>
+        public static TResult MatchError<TResult>(
+            global::Typewright.Validation.IDomainError error,
+            global::System.Func<global::Typewright.Validation.FormatError, TResult> format,
+            global::System.Func<global::Typewright.Validation.RangeError, TResult> range,
+            global::System.Func<global::Typewright.Validation.RequiredError, TResult> required)
+            => error switch
+            {
+                global::Typewright.Validation.FormatError matched0 => format(matched0),
+                global::Typewright.Validation.RangeError matched1 => range(matched1),
+                global::Typewright.Validation.RequiredError matched2 => required(matched2),
+                _ => throw new global::System.ArgumentOutOfRangeException(nameof(error), error?.GetType().FullName, "The error is not part of this domain type's error set."),
+            };
 
         /// <summary>Converts from string and raw values for components that still use TypeConverter.</summary>
         public sealed class DomainTypeConverter : global::System.ComponentModel.TypeConverter

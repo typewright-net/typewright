@@ -38,7 +38,7 @@ public class JsonSourceGenTests
         var exception = Assert.Throws<DomainValidationException>(
             () => JsonSerializer.Deserialize<SourceGenContainer>("""{"Code":"nope"}""", options));
 
-        Assert.Equal(ValidationErrorCodes.Pattern, Assert.Single(exception.Errors).Code);
+        Assert.IsType<PatternError>(Assert.Single(exception.Errors).Error);
     }
 }
 

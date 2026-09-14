@@ -24,7 +24,7 @@ namespace Snapshots
         {
             if (dto is null)
             {
-                return global::Typewright.Validation.ValidationResult<Parcel>.Failure(string.Empty, global::Typewright.Validation.ValidationErrorCodes.Required, "A value is required.");
+                return global::Typewright.Validation.ValidationResult<Parcel>.Failure(string.Empty, new global::Typewright.Validation.RequiredError());
             }
 
             var errors = new global::Typewright.Validation.ValidationErrors();
@@ -83,7 +83,30 @@ namespace Snapshots
                 new global::Typewright.Validation.DomainFieldInfo { Name = "sku", PropertyName = "Sku", FieldType = typeof(global::Snapshots.Sku), Required = true, IsCollection = false },
                 new global::Typewright.Validation.DomainFieldInfo { Name = "count", PropertyName = "Count", FieldType = typeof(global::Snapshots.Count), Required = true, IsCollection = false },
             },
+            ErrorTypes = new global::System.Type[] { typeof(global::Typewright.Validation.FormatError), typeof(global::Typewright.Validation.JsonInvalidError), typeof(global::Typewright.Validation.LengthError), typeof(global::Typewright.Validation.RangeError), typeof(global::Typewright.Validation.RequiredError) },
         };
+
+        /// <summary>
+        /// Exhaustively handles an error from this type's finite error set: one handler per
+        /// possible error type. When the set grows, every call site fails to compile until
+        /// the new case is handled.
+        /// </summary>
+        public static TResult MatchError<TResult>(
+            global::Typewright.Validation.IDomainError error,
+            global::System.Func<global::Typewright.Validation.FormatError, TResult> format,
+            global::System.Func<global::Typewright.Validation.JsonInvalidError, TResult> jsonInvalid,
+            global::System.Func<global::Typewright.Validation.LengthError, TResult> length,
+            global::System.Func<global::Typewright.Validation.RangeError, TResult> range,
+            global::System.Func<global::Typewright.Validation.RequiredError, TResult> required)
+            => error switch
+            {
+                global::Typewright.Validation.FormatError matched0 => format(matched0),
+                global::Typewright.Validation.JsonInvalidError matched1 => jsonInvalid(matched1),
+                global::Typewright.Validation.LengthError matched2 => length(matched2),
+                global::Typewright.Validation.RangeError matched3 => range(matched3),
+                global::Typewright.Validation.RequiredError matched4 => required(matched4),
+                _ => throw new global::System.ArgumentOutOfRangeException(nameof(error), error?.GetType().FullName, "The error is not part of this domain type's error set."),
+            };
     }
 
 }

@@ -33,7 +33,10 @@ public class DomainModelGeneratorTests
             public required Count Count { get; init; }
         }
 
+        public sealed record TimeTravelError : IDomainError;
+
         [DomainModel]
+        [Reports<TimeTravelError>]
         public sealed partial record Shipment
         {
             [JsonPropertyName("shipmentSku")]
@@ -48,7 +51,7 @@ public class DomainModelGeneratorTests
             {
                 if (candidate.Delivered is { } delivered && delivered < candidate.Sent)
                 {
-                    errors.Add("shipment.time_travel", "Delivery cannot precede sending.");
+                    errors.Add(new TimeTravelError());
                 }
             }
         }
@@ -123,8 +126,10 @@ public class DomainModelGeneratorTests
         var timeTravel = InvokeTryCreate(shipment, dtoType, dto);
         Assert.False((bool)GetProperty(timeTravel, "IsValid")!);
         var crossField = ((IEnumerable)GetProperty(timeTravel, "Errors")!).Cast<object>().Single();
-        Assert.Equal("shipment.time_travel", GetProperty(crossField, "Code"));
         Assert.Equal("", GetProperty(crossField, "Path"));
+        var crossFieldError = (Validation.IDomainError)GetProperty(crossField, "Error")!;
+        Assert.Equal("time_travel", crossFieldError.Code);
+        Assert.Equal("TimeTravelError", crossFieldError.GetType().Name);
     }
 
     [Fact]

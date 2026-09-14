@@ -4,30 +4,33 @@ namespace Typewright.Validation;
 
 /// <summary>
 /// Thrown when raw input cannot be turned into a domain type. Carries every validation
-/// failure, not just the first; inspect <see cref="Errors"/> for paths and stable codes.
+/// failure, not just the first, as typed <see cref="IDomainError"/> values — so handling
+/// stays strongly typed: <c>catch (DomainValidationException e) when
+/// (e.Errors.Contains&lt;ChecksumError&gt;())</c>, or pattern match over
+/// <see cref="ValidationFailure.Error"/>.
 /// </summary>
 public sealed class DomainValidationException : Exception
 {
     /// <summary>The validation failures that caused the exception. Never empty.</summary>
     public ValidationErrors Errors { get; }
 
-    /// <summary>Creates an exception carrying the given errors.</summary>
+    /// <summary>Creates an exception carrying the given failures.</summary>
     public DomainValidationException(ValidationErrors errors)
         : base(BuildMessage(errors))
     {
         Errors = errors;
     }
 
-    /// <summary>Creates an exception carrying a single error.</summary>
-    public DomainValidationException(string path, string code, string message)
-        : this(SingleError(path, code, message))
+    /// <summary>Creates an exception carrying a single failure.</summary>
+    public DomainValidationException(string path, IDomainError error)
+        : this(SingleFailure(path, error))
     {
     }
 
-    private static ValidationErrors SingleError(string path, string code, string message)
+    private static ValidationErrors SingleFailure(string path, IDomainError error)
     {
         var errors = new ValidationErrors();
-        errors.AddAt(path, code, message);
+        errors.AddAt(path, error);
         return errors;
     }
 
@@ -51,13 +54,13 @@ public sealed class DomainValidationException : Exception
                 builder.Append("; ");
             }
 
-            var error = errors[i];
-            if (error.Path.Length > 0)
+            var failure = errors[i];
+            if (failure.Path.Length > 0)
             {
-                builder.Append(error.Path).Append(": ");
+                builder.Append(failure.Path).Append(": ");
             }
 
-            builder.Append('[').Append(error.Code).Append("] ").Append(error.Message);
+            builder.Append('[').Append(failure.Error.Code).Append("] ").Append(failure.Error.DefaultMessage);
         }
 
         return builder.ToString();

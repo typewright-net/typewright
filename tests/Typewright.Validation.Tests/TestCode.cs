@@ -22,14 +22,12 @@ public readonly record struct TestCode : IDomainValue<TestCode, string>
     {
         if (value is null)
         {
-            return ValidationResult<TestCode>.Failure(
-                string.Empty, ValidationErrorCodes.Required, "A value is required.");
+            return ValidationResult<TestCode>.Failure(string.Empty, new RequiredError());
         }
 
         if (value.Length != 3 || !value.All(char.IsAsciiLetterUpper))
         {
-            return ValidationResult<TestCode>.Failure(
-                string.Empty, ValidationErrorCodes.Pattern, "The value must be three uppercase letters.");
+            return ValidationResult<TestCode>.Failure(string.Empty, new PatternError("^[A-Z]{3}$"));
         }
 
         return ValidationResult<TestCode>.Success(new TestCode(value));

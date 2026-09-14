@@ -50,7 +50,7 @@ public class BillingDomainTests
         var result = BillingDocument.TryCreate(dto);
 
         Assert.False(result.IsValid);
-        var pathsAndCodes = result.Errors.Select(error => (error.Path, error.Code)).ToHashSet();
+        var pathsAndCodes = result.Errors.Select(failure => (failure.Path, failure.Error.Code)).ToHashSet();
         var expected = new HashSet<(string, string)>
         {
             ("invoiceNumber", "pattern"),
@@ -62,6 +62,11 @@ public class BillingDomainTests
             ("lineItems[1].unitPrice", "range"),
         };
         Assert.Equal(expected, pathsAndCodes);
+
+        // The errors are types carrying the facts of the failure, not strings.
+        var lengthFailure = Assert.Single(result.Errors.OfType<LengthError>());
+        Assert.Equal(("memo", 0), (lengthFailure.Path, ((LengthError)lengthFailure.Error).Actual));
+        Assert.True(result.Errors.Contains<ChecksumError>());
     }
 
     [Fact]
@@ -70,8 +75,9 @@ public class BillingDomainTests
         var result = BillingDocument.TryCreate(ValidDocumentDto() with { LineItems = null });
 
         Assert.False(result.IsValid);
-        var error = Assert.Single(result.Errors);
-        Assert.Equal(("lineItems", "required"), (error.Path, error.Code));
+        var failure = Assert.Single(result.Errors);
+        Assert.Equal("lineItems", failure.Path);
+        Assert.IsType<RequiredError>(failure.Error);
     }
 
     [Fact]
@@ -95,8 +101,9 @@ public class BillingDomainTests
         });
 
         Assert.False(partiallyInvalid.IsValid);
-        var error = Assert.Single(partiallyInvalid.Errors);
-        Assert.Equal(("accountNumber", "checksum"), (error.Path, error.Code));
+        var fieldFailure = Assert.Single(partiallyInvalid.Errors);
+        Assert.Equal("accountNumber", fieldFailure.Path);
+        Assert.IsType<ChecksumError>(fieldFailure.Error);
 
         // With valid fields, the cross-field rule reports at the object level (empty path).
         var invalidRange = BillingDocumentSearch.TryCreate(new BillingDocumentSearch.Dto
@@ -107,8 +114,10 @@ public class BillingDomainTests
         });
 
         Assert.False(invalidRange.IsValid);
-        var rangeError = Assert.Single(invalidRange.Errors);
-        Assert.Equal(("", "date_range.invalid"), (rangeError.Path, rangeError.Code));
+        var rangeFailure = Assert.Single(invalidRange.Errors);
+        Assert.Equal("", rangeFailure.Path);
+        var dateRange = Assert.IsType<DateRangeError>(rangeFailure.Error);
+        Assert.Equal(new DateOnly(2026, 2, 1), dateRange.Begin);
     }
 
     [Fact]
@@ -121,7 +130,7 @@ public class BillingDomainTests
         var exception = Assert.Throws<DomainValidationException>(
             () => BillingDocumentSearch.Create(begin, end, account));
 
-        Assert.Equal("date_range.invalid", Assert.Single(exception.Errors).Code);
+        Assert.IsType<DateRangeError>(Assert.Single(exception.Errors).Error);
     }
 
     [Fact]

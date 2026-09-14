@@ -25,13 +25,13 @@ namespace Snapshots
             var errors = new global::Typewright.Validation.ValidationErrors();
             if (value is null)
             {
-                errors.Add(global::Typewright.Validation.ValidationErrorCodes.Required, "A value is required.");
+                errors.Add(new global::Typewright.Validation.RequiredError());
                 return global::Typewright.Validation.ValidationResult<InvoiceNumber>.Failure(errors);
             }
 
             if (!s_pattern.IsMatch(value))
             {
-                errors.Add(global::Typewright.Validation.ValidationErrorCodes.Pattern, "The value must match the pattern '^I\\d{9}$'.");
+                errors.Add(new global::Typewright.Validation.PatternError("^I\\d{9}$"));
             }
 
             if (errors.Count == 0)
@@ -84,7 +84,24 @@ namespace Snapshots
             {
                 new global::Typewright.Validation.DomainRuleInfo { Kind = "pattern", Pattern = "^I\\d{9}$" },
             },
+            ErrorTypes = new global::System.Type[] { typeof(global::Typewright.Validation.PatternError), typeof(global::Typewright.Validation.RequiredError) },
         };
+
+        /// <summary>
+        /// Exhaustively handles an error from this type's finite error set: one handler per
+        /// possible error type. When the set grows, every call site fails to compile until
+        /// the new case is handled.
+        /// </summary>
+        public static TResult MatchError<TResult>(
+            global::Typewright.Validation.IDomainError error,
+            global::System.Func<global::Typewright.Validation.PatternError, TResult> pattern,
+            global::System.Func<global::Typewright.Validation.RequiredError, TResult> required)
+            => error switch
+            {
+                global::Typewright.Validation.PatternError matched0 => pattern(matched0),
+                global::Typewright.Validation.RequiredError matched1 => required(matched1),
+                _ => throw new global::System.ArgumentOutOfRangeException(nameof(error), error?.GetType().FullName, "The error is not part of this domain type's error set."),
+            };
 
         /// <summary>Converts from string and raw values for components that still use TypeConverter.</summary>
         public sealed class DomainTypeConverter : global::System.ComponentModel.TypeConverter

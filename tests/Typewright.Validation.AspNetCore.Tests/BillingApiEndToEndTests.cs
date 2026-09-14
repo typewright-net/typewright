@@ -112,7 +112,7 @@ public class BillingApiEndToEndTests : IClassFixture<WebApplicationFactory<Progr
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var problem = await ReadProblemAsync(response);
-        Assert.Equal(["json.invalid"], Strings(problem.GetProperty("errorCodes").GetProperty("$")));
+        Assert.Equal(["json_invalid"], Strings(problem.GetProperty("errorCodes").GetProperty("$")));
     }
 
     [Fact]
@@ -160,7 +160,7 @@ public class BillingApiEndToEndTests : IClassFixture<WebApplicationFactory<Progr
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
         var problem = await ReadProblemAsync(response);
-        Assert.Equal(["date_range.invalid"], Strings(problem.GetProperty("errorCodes").GetProperty("")));
+        Assert.Equal(["date_range"], Strings(problem.GetProperty("errorCodes").GetProperty("")));
     }
 
     [Fact]

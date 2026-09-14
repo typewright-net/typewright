@@ -14,7 +14,7 @@ internal static class GeneratorTest
         var references = trustedAssemblies
             .Select(static path => (MetadataReference)MetadataReference.CreateFromFile(path))
             .ToList();
-        references.Add(MetadataReference.CreateFromFile(typeof(Validation.ValidationError).Assembly.Location));
+        references.Add(MetadataReference.CreateFromFile(typeof(Validation.ValidationFailure).Assembly.Location));
         return [.. references];
     }
 

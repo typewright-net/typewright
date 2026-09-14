@@ -46,7 +46,7 @@ public class DomainValueGeneratorTests
     public void Generated_sources_match_snapshots()
     {
         var (result, _) = GeneratorTest.Run(RepresentativeSource);
-        var sources = Assert.Single(result.Results).GeneratedSources;
+        var sources = result.For<DomainValueGenerator>().GeneratedSources;
         SnapshotAssert.MatchAll(sources.Select(source => (source.HintName, source.SourceText.ToString())));
     }
 

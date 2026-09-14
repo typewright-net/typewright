@@ -19,6 +19,20 @@ public sealed class DomainValueAttribute<TRaw> : Attribute
     public bool Comparable { get; set; }
 }
 
+/// <summary>
+/// Marks a partial record as a domain model composed of domain values, other domain
+/// models, and collections of them. The Typewright generator emits the model's nested
+/// <c>Dto</c> record (raw, all-nullable, serialization-friendly), <c>TryCreate</c> /
+/// <c>Create</c> / <c>ToDto</c>, JSON support, and descriptor. Nullability drives
+/// required-ness: a non-nullable property yields a <c>required</c> error when its raw
+/// value is missing, a nullable property maps null through. An optional
+/// <c>static partial void Validate(TSelf candidate, ValidationErrors errors)</c> hook adds
+/// cross-field rules; declaring it makes the constructor private so instances can only be
+/// built through the factories.
+/// </summary>
+[AttributeUsage(AttributeTargets.Class, Inherited = false)]
+public sealed class DomainModelAttribute : Attribute;
+
 /// <summary>Requires a string value to match a regular expression.</summary>
 [AttributeUsage(AttributeTargets.Struct, Inherited = false)]
 public sealed class PatternAttribute(string pattern) : Attribute

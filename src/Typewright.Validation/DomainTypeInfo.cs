@@ -18,6 +18,28 @@ public sealed class DomainTypeInfo
 
     /// <summary>The declared validation rules, in the order they run.</summary>
     public IReadOnlyList<DomainRuleInfo> Rules { get; init; } = [];
+
+    /// <summary>For domain models: the composed fields, in declaration order.</summary>
+    public IReadOnlyList<DomainFieldInfo> Fields { get; init; } = [];
+}
+
+/// <summary>One composed field of a domain model.</summary>
+public sealed record DomainFieldInfo
+{
+    /// <summary>The field's name in the JSON convention of the input shape.</summary>
+    public required string Name { get; init; }
+
+    /// <summary>The CLR property name on the model.</summary>
+    public required string PropertyName { get; init; }
+
+    /// <summary>The domain type of the field (the element type for collections).</summary>
+    public required Type FieldType { get; init; }
+
+    /// <summary>Whether a missing raw value is an error.</summary>
+    public required bool Required { get; init; }
+
+    /// <summary>Whether the field is a collection of domain types.</summary>
+    public bool IsCollection { get; init; }
 }
 
 /// <summary>

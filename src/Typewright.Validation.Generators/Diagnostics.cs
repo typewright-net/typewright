@@ -32,11 +32,29 @@ internal static class DiagnosticDescriptors
         defaultSeverity: DiagnosticSeverity.Error,
         isEnabledByDefault: true);
 
+    public static readonly DiagnosticDescriptor InvalidDomainModelShape = new(
+        id: "TW1004",
+        title: "Invalid [DomainModel] type shape",
+        messageFormat: "The [DomainModel] type '{0}' must be a non-generic, non-nested, partial record class",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
+    public static readonly DiagnosticDescriptor UnsupportedModelProperty = new(
+        id: "TW1005",
+        title: "Unsupported domain model property",
+        messageFormat: "The property '{0}' on [DomainModel] '{1}' is not a domain value, a domain model, or a supported collection of them; it cannot appear in the DTO shape",
+        category: Category,
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true);
+
     public static DiagnosticDescriptor ById(string id) => id switch
     {
         "TW1001" => InvalidDomainValueShape,
         "TW1002" => RuleNotApplicable,
         "TW1003" => NotComparable,
+        "TW1004" => InvalidDomainModelShape,
+        "TW1005" => UnsupportedModelProperty,
         _ => throw new ArgumentOutOfRangeException(nameof(id), id, "Unknown diagnostic id."),
     };
 }

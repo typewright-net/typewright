@@ -7,6 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Snapshots are expected generator output, not test code. -->
+    <Compile Remove="Snapshots/**/*.cs" />
+    <None Include="Snapshots/**/*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
     <PackageReference Include="xunit.v3" />
   </ItemGroup>

@@ -18,17 +18,23 @@ internal static class GeneratorTest
         return [.. references];
     }
 
-    /// <summary>Runs the domain value generator over <paramref name="source"/>.</summary>
+    /// <summary>Runs the Typewright generators over <paramref name="source"/>.</summary>
     public static (GeneratorDriverRunResult Result, Compilation Output) Run(string source)
     {
         var compilation = CSharpCompilation.Create(
             "GeneratorTests",
             [CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Latest))],
             References.Value,
-            new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+            new CSharpCompilationOptions(
+                OutputKind.DynamicallyLinkedLibrary,
+                nullableContextOptions: NullableContextOptions.Enable));
 
-        GeneratorDriver driver = CSharpGeneratorDriver.Create(new DomainValueGenerator());
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(new DomainValueGenerator(), new DomainModelGenerator());
         driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var output, out _);
         return (driver.GetRunResult(), output);
     }
+
+    /// <summary>The per-generator result for <typeparamref name="TGenerator"/>.</summary>
+    public static GeneratorRunResult For<TGenerator>(this GeneratorDriverRunResult result)
+        => result.Results.Single(item => item.Generator.GetGeneratorType() == typeof(TGenerator));
 }

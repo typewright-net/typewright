@@ -1,6 +1,6 @@
 # Plan 01: Model Validation Framework + ASP.NET Integration
 
-Status: proposed (2026-09-11)
+Status: implemented through phase 5 (2026-09-14); see "Implementation notes" at the end
 Scope: `Typewright.Validation`, `Typewright.Validation.Generators`, `Typewright.Validation.AspNetCore`
 Builds on: [docs/model-validation.md](../model-validation.md)
 
@@ -374,3 +374,46 @@ Recommendations are already applied above; flag any you disagree with.
 - DTO-routed JSON converters are the initial wire and log format for the
   append-only stream; a binary format can replace them without touching domain
   types.
+
+## 9. Implementation notes (2026-09-14)
+
+Phases 0-5 are implemented and green (77 tests). Deviations from the text
+above, discovered during implementation:
+
+- **Field value structs cannot implement `IBindableFromHttpContext<TSelf>`** —
+  the interface has a `class` constraint. Minimal APIs honor the equivalent
+  pattern-based static `BindAsync`, so the generator emits that for structs and
+  the interface plus `BindAsync` for models. Behavior is as designed.
+- **`Range` bounds** come in three attribute forms: `(int, int)`,
+  `(double, double)`, and `(string, string)` parsed with the raw type's
+  invariant `Parse` (for `DateOnly`, `decimal`, and friends, whose values
+  cannot be attribute constants).
+- **TW0004 vs. generation**: because TW0004 is a warning, the model generator
+  copies non-domain properties between model and DTO unvalidated (passthrough)
+  rather than erroring; `[Raw]` on the property silences the warning. The
+  interim generator error TW1005 was retired. Generator-side shape errors are
+  TW1001-TW1004; the missing-`partial` case is reported only by analyzer
+  TW0003.
+- **Code fixes were not shipped**: a fix provider requires a separate
+  Workspaces-referencing assembly (RS1038 forbids Workspaces in a generator
+  assembly), which is not the cheap add hoped for. Future work.
+- **Snapshot tests use a small built-in helper**
+  (`tests/.../SnapshotAssert.cs`, committed `Snapshots/*.verified.cs`,
+  `TYPEWRIGHT_UPDATE_SNAPSHOTS=1` to regenerate) instead of Verify: Verify 33
+  now requires a SponsorCheck license declaration in the build, which is a
+  licensing statement for the repo owner to make, not tooling.
+- **Cross-field hook models also get typed `TryCreate`/`Create` factories**
+  over their domain-typed properties — with a private constructor they are the
+  only way to build such a model from already-valid fields (the mockup's
+  `Create(beginDate, endDate, accountNumber)`).
+- **`UseTypewright()` additionally maps `BadHttpRequestException`** to its
+  status code (used for 415 on non-JSON bodies), so binder-originated statuses
+  are deterministic across environments.
+- **Localization** (`IValidationMessageLocalizer`) applies at the
+  problem-details boundary; MVC `ModelState` messages are not yet routed
+  through it.
+- **Known gaps**: a native AOT publish has not been exercised (STJ source-gen
+  compatibility is tested); optional nullable-struct parameters
+  (`InvoiceNumber?`) bind as null by design but have no end-to-end test; the
+  `dotnet test` MTP opt-in lives in `global.json` (required by the .NET 10
+  SDK).

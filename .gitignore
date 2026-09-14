@@ -8,3 +8,4 @@ bin/
 *.vcxproj.user
 *.vcxproj.filters.user
 *.vcxproj.shared.user*.received
+BenchmarkDotNet.Artifacts/

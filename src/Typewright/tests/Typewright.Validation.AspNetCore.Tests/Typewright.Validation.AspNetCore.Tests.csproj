@@ -13,8 +13,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\samples\Billing.Api\Billing.Api.csproj" />
-    <ProjectReference Include="..\..\src\Typewright.Validation\Typewright.Validation.csproj" />
-    <ProjectReference Include="..\..\src\Typewright.Validation.AspNetCore\Typewright.Validation.AspNetCore.csproj" />
+    <ProjectReference Include="..\..\Typewright.Validation\Typewright.Validation.csproj" />
+    <ProjectReference Include="..\..\Typewright.Validation.AspNetCore\Typewright.Validation.AspNetCore.csproj" />
   </ItemGroup>
 
 </Project>

@@ -1,11 +1,9 @@
 <Solution>
-  <Folder Name="/src/">
-    <Project Path="src/Typewright.Validation/Typewright.Validation.csproj" />
-    <Project Path="src/Typewright.Validation.Generators/Typewright.Validation.Generators.csproj" />
-    <Project Path="src/Typewright.Validation.AspNetCore/Typewright.Validation.AspNetCore.csproj" />
-    <Project Path="src/Typewright.Actor/Typewright.Actor.csproj" />
-    <Project Path="src/Typewright.Lattice/Typewright.Lattice.csproj" />
-  </Folder>
+  <Project Path="Typewright.Validation/Typewright.Validation.csproj" />
+  <Project Path="Typewright.Validation.Generators/Typewright.Validation.Generators.csproj" />
+  <Project Path="Typewright.Validation.AspNetCore/Typewright.Validation.AspNetCore.csproj" />
+  <Project Path="Typewright.Actor/Typewright.Actor.csproj" />
+  <Project Path="Typewright.Lattice/Typewright.Lattice.csproj" />
   <Folder Name="/tests/">
     <Project Path="tests/Typewright.Validation.Tests/Typewright.Validation.Tests.csproj" />
     <Project Path="tests/Typewright.Validation.Generators.Tests/Typewright.Validation.Generators.Tests.csproj" />

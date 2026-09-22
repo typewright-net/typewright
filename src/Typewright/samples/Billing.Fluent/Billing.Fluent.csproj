@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!-- Required by the Microsoft.AspNetCore.OpenApi XML-comment generator. -->
+    <InterceptorsNamespaces>$(InterceptorsNamespaces);Microsoft.AspNetCore.OpenApi.Generated</InterceptorsNamespaces>
+  </PropertyGroup>
+
+  <!-- The same Billing domain as Billing.Api, defined entirely through the fluent API:
+       no reference to Typewright.Validation.Generators, no attributes. -->
+  <ItemGroup>
+    <ProjectReference Include="..\..\Typewright.Validation\Typewright.Validation.csproj" />
+    <ProjectReference Include="..\..\Typewright.Validation.AspNetCore\Typewright.Validation.AspNetCore.csproj" />
+  </ItemGroup>
+
+</Project>

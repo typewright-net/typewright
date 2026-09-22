@@ -150,6 +150,68 @@ restoring what per-error exception types offered without giving up accumulation:
 catch (DomainValidationException e) when (e.Errors.Contains<ChecksumError>()) { ... }
 ```
 
+## Fluent definitions (no generator required)
+
+Attributes plus the source generator are one *front end* over the runtime — not the only
+way in. `Typewright.Validation.Fluent` defines the same aspects by hand, against the
+same primitives, error types, descriptors, binding, JSON, and OpenAPI support:
+
+```csharp
+public readonly record struct AccountNumber : IDomainValue<AccountNumber, string>
+{
+    private static readonly DomainValueDefinition<AccountNumber, string> Definition =
+        DomainValue.Define<AccountNumber, string>(static value => new(value))
+            .Normalize(trim: true, casing: Casing.Upper)
+            .Length(1, 64)
+            .Must(Luhn.IsValid, static _ => new ChecksumError())
+            .Build();
+
+    private readonly string _value;
+    private AccountNumber(string value) => _value = value;
+    public string Value => _value ?? throw new InvalidOperationException("...");
+    public static ValidationResult<AccountNumber> TryCreate(string? value) => Definition.TryCreate(value);
+    public static AccountNumber Create(string? value) => Definition.Create(value);
+    public static DomainTypeInfo DomainTypeInfo => Definition.TypeInfo;
+}
+```
+
+Models compose fields through typed handles, so construction stays compiler-checked at
+any arity, with the same JSON paths and error accumulation as generated models:
+
+```csharp
+var builder = DomainModel.Define<BillingDocument, BillingDocument.Dto>();
+var number = builder.Field(static dto => dto.InvoiceNumber, InvoiceNumber.TryCreate);
+var memo   = builder.OptionalValue(static dto => dto.Memo, Memo.TryCreate);
+var items  = builder.Collection(static dto => dto.LineItems, LineItem.TryCreate);
+var definition = builder
+    .Must(static d => ..., static d => new SomeCrossFieldError(...))
+    .Construct(fields => new BillingDocument
+    {
+        InvoiceNumber = fields.Get(number),
+        Memo = fields.Get(memo),
+        LineItems = fields.Get(items),
+    });
+```
+
+The guarantees carry over, enforced by different means:
+
+- String-only rules (`Pattern`, `Length`, `NotEmpty`, `Normalize`) are extension methods
+  on `Builder<TSelf, string>` — the compiler does what TW1002 does for attributes.
+- `Must<TError>(predicate, errorFactory)` declares the error in the set *by
+  construction*; free-form `Validate(...)` hooks pair with `Reports<TError>()`, and an
+  undeclared report throws at validation time — the runtime equivalent of TW0005.
+- `Definition.TypeInfo` yields the same `DomainTypeInfo` (rules, fields, `ErrorTypes`
+  derived through `DomainTypeRegistry`), so OpenAPI transformers, MVC binders, and
+  problem details work unchanged.
+
+What manual types don't get: the compile-time `MatchError` matcher (that is codegen by
+nature — `ErrorTypes` remains the runtime enumeration) and the TW0001/TW0002
+construction-hole analyzers, which key off the attributes.
+
+`samples/Billing.Fluent` is the whole Billing domain and API defined this way — no
+generator reference at all — and `FluentParityTests` asserts both front ends produce
+identical failures, wire output, and descriptors.
+
 ## Analyzers
 
 The analyzers ship in the generator package, so the default install closes the holes the

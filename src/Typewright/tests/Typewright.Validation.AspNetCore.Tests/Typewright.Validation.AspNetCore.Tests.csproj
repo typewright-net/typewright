@@ -13,6 +13,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\samples\Billing.Api\Billing.Api.csproj" />
+    <!-- Aliased because both samples define a top-level Program in the global namespace. -->
+    <ProjectReference Include="..\..\samples\Billing.Fluent\Billing.Fluent.csproj" Aliases="fluent" />
     <ProjectReference Include="..\..\Typewright.Validation\Typewright.Validation.csproj" />
     <ProjectReference Include="..\..\Typewright.Validation.AspNetCore\Typewright.Validation.AspNetCore.csproj" />
   </ItemGroup>

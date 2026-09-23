@@ -2,12 +2,14 @@
   <Project Path="Typewright.Validation/Typewright.Validation.csproj" />
   <Project Path="Typewright.Validation.Generators/Typewright.Validation.Generators.csproj" />
   <Project Path="Typewright.Validation.AspNetCore/Typewright.Validation.AspNetCore.csproj" />
+  <Project Path="Typewright.Agents/Typewright.Agents.csproj" />
   <Project Path="Typewright.Actor/Typewright.Actor.csproj" />
   <Project Path="Typewright.Lattice/Typewright.Lattice.csproj" />
   <Folder Name="/tests/">
     <Project Path="tests/Typewright.Validation.Tests/Typewright.Validation.Tests.csproj" />
     <Project Path="tests/Typewright.Validation.Generators.Tests/Typewright.Validation.Generators.Tests.csproj" />
     <Project Path="tests/Typewright.Validation.AspNetCore.Tests/Typewright.Validation.AspNetCore.Tests.csproj" />
+    <Project Path="tests/Typewright.Agents.Tests/Typewright.Agents.Tests.csproj" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Billing.Api/Billing.Api.csproj" />
@@ -15,5 +17,6 @@
   </Folder>
   <Folder Name="/benchmarks/">
     <Project Path="benchmarks/Typewright.Validation.Benchmarks/Typewright.Validation.Benchmarks.csproj" />
+    <Project Path="benchmarks/Typewright.Agents.Benchmarks/Typewright.Agents.Benchmarks.csproj" />
   </Folder>
 </Solution>

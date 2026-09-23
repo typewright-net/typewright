@@ -7,5 +7,7 @@ bin/
 *.sln.docstates
 *.vcxproj.user
 *.vcxproj.filters.user
-*.vcxproj.shared.user*.received
+*.vcxproj.shared.user
+*.received
 BenchmarkDotNet.Artifacts/
+TestResults/

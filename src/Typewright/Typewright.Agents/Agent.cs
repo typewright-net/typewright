@@ -218,7 +218,13 @@ public sealed class Agent<TState, TMessage> : IAgent<TMessage>
         Task loop;
         try
         {
-            loop = _options.Dispatcher.Run(RunAsync);
+            // The loop must not inherit the starter's ExecutionContext: its AsyncLocals
+            // (Activity.Current, logging scopes, ...) would otherwise leak into every
+            // message the agent ever processes.
+            using (ExecutionContext.SuppressFlow())
+            {
+                loop = _options.Dispatcher.Run(RunAsync);
+            }
         }
         catch (Exception exception)
         {

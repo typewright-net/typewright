@@ -21,7 +21,10 @@ public delegate ValueTask MessageDelegate<TMessage>(MessageContext<TMessage> con
 /// <summary>
 /// Wraps message handling, ASP.NET-middleware style: logging, metrics, tracing, timeouts,
 /// validation. Composed once per agent; an interceptor that does not call
-/// <c>next</c> short-circuits the message, and the agent's state is unchanged.
+/// <c>next</c> short-circuits the message, and the agent's state is unchanged (it should
+/// then settle a request's reply channel, for example with <c>TryReject</c>, or the caller
+/// waits until it cancels). Interceptors run on the agent loop: do not use
+/// <c>ConfigureAwait(false)</c>, or the rest of the pipeline leaves the dispatcher's context.
 /// </summary>
 /// <typeparam name="TMessage">The agent's message type.</typeparam>
 public interface IMessageInterceptor<TMessage>

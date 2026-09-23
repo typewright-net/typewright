@@ -113,7 +113,8 @@ public static class Agent
     public static IAgent<TMessage> Start<TMessage>(IMessageHandler<TMessage> handler, AgentOptions<TMessage>? options = null)
     {
         ArgumentNullException.ThrowIfNull(handler);
-        return Start(Unit.Value, new StatelessHandlerAdapter<TMessage>(handler), options);
+        var core = handler as IMessageHandler<Unit, TMessage> ?? new StatelessHandlerAdapter<TMessage>(handler);
+        return Start(Unit.Value, core, options);
     }
 }
 

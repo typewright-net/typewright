@@ -1,6 +1,6 @@
 # Plan 03: Lightweight Agents and Actors
 
-Status: accepted (2026-09-22); decisions D1–D10 confirmed, D7 revised per C7
+Status: phases 0–3 and 5 implemented (2026-09-23); phase 4 split into plan 04 (see §9)
 Scope: `Typewright.Agents` (new), `Typewright.Actors` (replaces the `Typewright.Actor` placeholder)
 Builds on: [docs/lightweight-actors.md](../lightweight-actors.md), [docs/vision.md](../vision.md), plan 02 (typed domain errors)
 Feeds: [docs/object-database.md](../object-database.md) (Lattice), the REST document layer
@@ -475,7 +475,7 @@ that plan 02 §8's exhaustive machinery will later generate.
 **Phase 4: Remote boundary.** Envelope serialization contract, `ValidationInterceptor`,
 `RemoteActorRef` + `RemoteReplyChannel` by correlation id, the HTTP transport actor
 pair, a two-process sample. Split into plan 04 if phase 3 lands before the REST layer's
-needs are clearer.
+needs are clearer. *(Split: see §9 and [plan 04](04-remote-actors.md).)*
 
 **Phase 5: Hardening.** XML docs, README, allocation audit of the hot loop (target: zero
 allocations per fire-and-forget message on the channel mailbox, one per request for the
@@ -512,3 +512,107 @@ Confirmed 2026-09-22 as recommended, except D7, revised during review (C7).
   → generated message records implementing `IRequest<Balance>`, a typed proxy over
   `IMessageTarget<AccountMessage>`, and a router — closing the last unchecked link
   with the generator infrastructure already in place.
+
+## 9. Implementation notes (2026-09-23)
+
+Phases 0–3 and 5 are implemented. There are 196 tests across the solution (52 for
+agents, 33 for actors), and the concurrency-sensitive suites were run repeatedly to
+check they are not flaky. The notes below record where the code departs from the text
+above, and why.
+
+**Packaging and vocabulary**
+
+- `Typewright.Agents` references `Typewright.Validation`, not only the BCL: C2's
+  `TryReject(IDomainError)` needs `IDomainError`. Validation is itself BCL-only, so the
+  transitive closure is unchanged and the independence C5 wanted, meaning no
+  actor-system or `Microsoft.Extensions` dependency, still holds.
+- `OperationResult<T>`, `Rejection`, and `DomainErrorException` live in
+  `Typewright.Validation` beside `IDomainError`, because the service layer (plan 02 §8)
+  needs them without agents. `AskAsync` surfaces a rejection as `DomainErrorException`.
+- The placeholder was renamed by moving its project file. The old
+  `src/Typewright/Typewright.Actor/` directory could not be deleted while another
+  process held its `bin`/`obj`; it contains only ignored build output.
+
+**Contract shapes that differ from §3**
+
+- `IDispatcher.Run(Func<Task> loop)`: the loop owns its tokens, so the dispatcher needs
+  none.
+- `IMailbox` is shaped like a channel reader: `TryPost`/`PostAsync` return a
+  `PostResult` (`Posted`, `Full`, or `Closed`) so the agent can raise the right
+  exception, and the loop uses `WaitToReadAsync`/`TryTake`. `ReadAllAsync` is a default
+  interface method. `DrainUndelivered` was dropped because the agent drains with
+  `TryTake`.
+- `IMessageSink` (`TryPost`/`PostAsync`) was split out of `IMessageTarget`, which adds
+  the asks. `ActorContext.Self` is a sink, so an actor cannot ask itself and deadlock.
+- `IEnvelopeTarget` (`TryDeliver`/`DeliverAsync`) and the static `Delivery` helpers
+  implement the message-level operations over envelopes. Agents, actor references, and
+  a future remote proxy all send through them.
+- Lifecycle hooks became `IAgentLifecycle<TState>`, with `OnStartedAsync`,
+  `OnRestartingAsync`, and `OnStoppedAsync`. `OnStartedAsync` is the hydration point for
+  Lattice, where an actor loads its key's state before its first message.
+- `Completion` never ends as cancelled. A graceful stop or an abort completes it
+  successfully; a `Stop` or `Escalate` decision, or a failing lifecycle hook, faults it.
+  `AgentStatus` tells these cases apart. `StopAsync(token)` aborts when the token fires,
+  matching `IHostedService.StopAsync`.
+- Router: the `TCase : TMessage` constraint means interface routes need a message type
+  that an interface can satisfy, such as an interface or `object`. The constraint is
+  kept because it catches routes that can never match.
+
+**Fixes made during implementation**
+
+- The loop now suppresses `ExecutionContext` flow when the dispatcher starts it.
+  Without this, the caller of `Start()` leaked its async-local values
+  (`Activity.Current`, logging scopes) into every message the agent processed. An
+  on-demand actor spawned inside an HTTP request would have parented all its later work
+  to that request's trace.
+- Dropping mailbox modes fail the dropped request's reply channel, so its caller does
+  not hang (§3.3 implied this; it is now tested).
+
+**Actors (§4)**
+
+- Supervision strategies are functions on the parent's definition (`ChildSupervision`)
+  or on the system (`DefaultSupervision`). §4.3 allowed "the parent's handler *or* a
+  built-in strategy"; only strategies are implemented, and routing failures through the
+  parent's mailbox is deferred.
+- The `Resume` directive recreates the child from its last committed state; `Restart`
+  recreates it from its definition. Either way the failed agent's queued requests have
+  already failed, and the new agent starts with an empty mailbox. `Escalate` stops the
+  child's subtree and treats the parent as failed. An escalation past the top level
+  stops the actor and is logged at critical level.
+- The default failure policy for actors stays `Resume`, the same as for agents.
+  Escalating to supervision is opt-in per definition, because escalating fails every
+  queued request.
+- `ActorSystem` implements `IDisposable` as well as `IAsyncDisposable`, because hosts
+  that dispose their container synchronously throw on services that are only
+  async-disposable.
+
+**Not done, and why**
+
+- The queue-depth metric is not emitted. An interceptor never sees the mailbox, so depth
+  is available only through the `MailboxCount` property.
+- Requests the handler never replies to are not failed automatically. A deferred reply
+  (keep the channel in state, reply from a later message) is a legitimate pattern. The
+  interceptor contract documents that a short-circuit must settle the request.
+- Generated actor interfaces (C1) remain a forward hook (§8).
+
+**Measured (BenchmarkDotNet short job)**
+
+| Operation | Time | Allocated |
+|---|---|---|
+| Fire-and-forget post, any dispatcher | 42–58 ns | 0 B |
+| Agent ask round trip | 0.7–0.9 µs | 215 B |
+| Actor ask round trip | about 1.0 µs | 472 B |
+
+The actor figure includes stamped headers, a new correlation id, and the sender scope.
+All three meet or approach the phase 5 target of no allocation per fire-and-forget
+message and one reply channel per request.
+
+**Phase 4 was split into plan 04.** The REST layer does not exist yet, so its needs are
+no clearer than when this plan was written. Implementing phases 0–3 also exposed two
+problems with §4.5, which [plan 04](04-remote-actors.md) addresses:
+
+- A `ValidationInterceptor` inside the pipeline cannot turn raw DTOs into messages,
+  because the mailbox is already typed. That conversion has to happen at the transport,
+  before delivery.
+- HTTP request/response already pairs an ask with its reply, so reply routing by
+  correlation id is only needed for asynchronous transports.

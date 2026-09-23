@@ -17,9 +17,11 @@ app.MapPut("/invoices/{id}", (InvoiceNumber id, BillingDocument doc, IBilling sv
 
 | Project | What it is |
 |---|---|
-| `Typewright.Validation` | Contracts and primitives: `IDomainValue<TSelf, TRaw>`, `IDomainModel<TSelf, TDto>`, typed `IDomainError` records, `ValidationResult<T>`, path-scoped `ValidationErrors`, `DomainValidationException`, rule attributes, DTO-routed JSON converters, `DomainTypeInfo` descriptors. No dependencies beyond the BCL; usable entirely by hand. |
+| `Typewright.Validation` | Contracts and primitives: `IDomainValue<TSelf, TRaw>`, `IDomainModel<TSelf, TDto>`, typed `IDomainError` records, `ValidationResult<T>`, `OperationResult<T>`, path-scoped `ValidationErrors`, `DomainValidationException`, rule attributes, DTO-routed JSON converters, `DomainTypeInfo` descriptors. No dependencies beyond the BCL; usable entirely by hand. |
 | `Typewright.Validation.Generators` | Incremental source generator plus analyzers. Turns `[DomainValue<T>]` / `[DomainModel]` declarations into complete implementations and closes the `new`/`default`/`with` construction holes. |
 | `Typewright.Validation.AspNetCore` | Minimal API binding helpers, `UseTypewright()` middleware writing RFC 9457 `HttpValidationProblemDetails`, an `IExceptionHandler` alternative, OpenAPI transformers, and MVC model binders. |
+| `Typewright.Agents` | A C# `MailboxProcessor` with replaceable parts: mailbox, dispatcher, handler, reply channel, failure policy, interceptor pipeline. Typed request/reply, typed rejections, lifecycle, and failure policies. Depends only on `Typewright.Validation`, so nothing beyond the BCL. |
+| `Typewright.Actors` | Addressable actors on top of agents: `ActorPath` addressing, an actor system with get-or-spawn per key, header stamping, supervision, and hosting/DI integration. |
 
 ## Field values
 
@@ -273,27 +275,109 @@ as their DTO schema, and every domain-typed operation gains the 400 response. MV
 controllers get the same behavior through model binders that report into `ModelState`, so
 the `[ApiController]` automatic 400 has the same shape.
 
+## Agents
+
+An agent processes one message at a time, in order, threading its state through a
+handler: F#'s `MailboxProcessor`, with every part replaceable. No actor system is
+needed; an agent is just an object you hold a reference to:
+
+```csharp
+public abstract record CounterMessage;
+public sealed record Increment : CounterMessage;
+public sealed record GetCount : CounterMessage, IRequest<int>;   // a request declares its reply
+
+var counter = Agent.Start(0, MessageHandler.For<int, CounterMessage>()
+    .On<Increment>(static (count, _) => count + 1)
+    .On<GetCount, int>(static (count, _) => (count, count))      // must reply with an int
+    .Build());
+
+counter.TryPost(new Increment());
+int total = await counter.AskAsync(new GetCount());              // reply type inferred from the request
+```
+
+- **Typed request/reply at both ends.** `IRequest<TReply>` fixes the reply type once:
+  `AskAsync` infers it, and `On<TRequest, TReply>` is constrained to it, so a handler
+  cannot reply with the wrong type.
+- **Domain outcomes are values, faults are exceptions.** A handler may return
+  `OperationResult.Reject(new InsufficientFundsError(...))`; `TryAskAsync` hands the
+  caller a typed `OperationResult<TReply>`, and `AskAsync` throws a `DomainErrorException`
+  carrying it. A rejection is not a failure: the agent carries on.
+- **State is readable without the mailbox.** `agent.CurrentState` is the last committed
+  state, never a partially applied one (state commits only when handling succeeds).
+- **Cancellation.** Cancelling an ask stops the wait immediately. A request still queued
+  is skipped (counted on a metric; `SkipCancelledRequests = false` opts out), and
+  handlers that take a `CancellationToken` also observe the caller's cancellation.
+- **Lifecycle.** Messages posted before `Start` are buffered; `StopAsync` drains, then
+  stops; `AbortAsync` cancels in-flight work. Every termination fails the requests still
+  queued, so no caller waits forever. Optional `IAgentLifecycle<TState>` hooks run at
+  start (e.g. to load state), on restart, and at stop.
+- **Failure policies** decide `Resume` (default), `Restart`, `Stop`, or `Escalate`, with
+  sliding-window context for limits such as "restart at most 3 times a minute".
+- **Replaceable parts.** Mailboxes: unbounded, bounded (wait, reject, drop oldest or
+  newest), or priority. Dispatchers: thread pool, any `TaskScheduler` (such as an
+  exclusive scheduler shared by several agents), or a dedicated thread. Interceptors wrap
+  every message like ASP.NET middleware; built-ins add tracing, metrics, and timeouts.
+
+A fire-and-forget post costs about 50 ns and allocates nothing; an ask round trip takes
+about 0.8 microseconds and allocates 215 bytes.
+
+## Actors
+
+Actors are agents with an address, a system that owns their lifecycle, and a supervisor.
+Addresses are `ActorPath` domain values such as `/accounts/AC000042`, and parent/child
+is path containment:
+
+```csharp
+builder.Services.AddActorSystem();   // drains every actor when the host stops
+
+var account = actors.GetOrSpawn(ActorPath.Create($"/accounts/{id}"), Accounts.Definition);
+OperationResult<AccountSnapshot> result = await account.TryAskAsync(new Deposit(amount));
+
+// The CQRS read path: the last committed state, without queueing behind writes.
+if (account.TryGetState<AccountState>(out var state)) { ... }
+```
+
+- `GetOrSpawn` creates exactly one actor per path, however many callers race for it: the
+  per-key pattern where every command for a resource is serialized while different
+  resources proceed in parallel.
+- References stamp every send with a correlation id (carried over from the message being
+  handled), the sending actor's path, a timestamp, and W3C trace context.
+- Supervision is one-for-one: when a child's failure policy escalates, its parent's
+  `ChildSupervision` (or the system default) decides to resume it from its last committed
+  state, restart it from its definition, stop its subtree, or escalate further.
+  References stay valid across recreation.
+- Handlers can come from dependency injection (`ActorDefinition.FromServices<...>`).
+
+Addressing adds about 0.2 microseconds and 257 bytes to an ask, for the stamped headers.
+`samples/Ledger.Actors` is a bank ledger built this way: one actor per account under a
+supervising registry, endpoints written in domain types, and typed rejections mapped to
+404 and 409 responses.
+
 ## Repository layout
 
 ```
-src/
-  Typewright.Validation/             contracts, errors, results, rules, JSON support
-  Typewright.Validation.Generators/  incremental generator + analyzers (netstandard2.0)
-  Typewright.Validation.AspNetCore/  binding, middleware, ProblemDetails, OpenAPI, MVC
-  Typewright.Actor/                  (later plan)
-  Typewright.Lattice/                (later plan)
-tests/                               xUnit v3 (dotnet test runs in MTP mode)
-samples/Billing.Api/                 the invoice example as a running minimal API + MVC app
-benchmarks/                          BenchmarkDotNet, DTO-to-domain transform
-docs/plans/                          design plans; 01 covers everything above
+src/Typewright/                        solution root (Typewright.slnx, shared build props)
+  Typewright.Validation/               contracts, errors, results, rules, JSON support
+  Typewright.Validation.Generators/    incremental generator + analyzers (netstandard2.0)
+  Typewright.Validation.AspNetCore/    binding, middleware, ProblemDetails, OpenAPI, MVC
+  Typewright.Agents/                   mailbox processor, router, pipeline, policies
+  Typewright.Actors/                   addressing, actor system, supervision, hosting
+  Typewright.Lattice/                  (later plan)
+  tests/                               xUnit v3 (dotnet test runs in MTP mode)
+  samples/Billing.Api/                 the invoice example as a minimal API + MVC app
+  samples/Billing.Fluent/              the same domain defined without the generator
+  samples/Ledger.Actors/               a bank ledger: one actor per account
+  benchmarks/                          BenchmarkDotNet: validation, agents, actors
+docs/plans/                            design plans (01 validation, 02 errors, 03 agents and actors)
 ```
 
-Build and test:
+Build and test, from `src/Typewright`:
 
 ```
 dotnet build Typewright.slnx
 dotnet test --solution Typewright.slnx
 dotnet run -c Release --project benchmarks/Typewright.Validation.Benchmarks -- --filter *
+dotnet run -c Release --project benchmarks/Typewright.Agents.Benchmarks -- --filter *
 ```
 
 The DTO-to-domain transform for a fully valid 20-field document runs in roughly 160 ns

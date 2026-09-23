@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <IsPackable>false</IsPackable>
+    <UseMicrosoftTestingPlatformRunner>true</UseMicrosoftTestingPlatformRunner>
+    <!-- As in the agent tests: cancellation tokens are part of what is under test; every
+         wait is bounded by an explicit timeout instead of the ambient test token. -->
+    <NoWarn>$(NoWarn);xUnit1051</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="xunit.v3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Typewright.Actors\Typewright.Actors.csproj" />
+    <ProjectReference Include="..\..\samples\Ledger.Actors\Ledger.Actors.csproj" />
+  </ItemGroup>
+
+</Project>
